@@ -1,0 +1,70 @@
+/* @import "tailwindcss"; */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.container {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #0f172a;
+  overflow-x: hidden;
+}
+
+.card {
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.card h1 {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  width: 100%;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: white;
+}
+
+.create {
+  background: #2563eb;
+}
+
+.join {
+  background: #16a34a;
+}
+
+.divider {
+  text-align: center;
+  margin: 20px 0;
+  color: #666;
+}
