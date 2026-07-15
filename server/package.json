@@ -4,9 +4,9 @@
   "description": "",
   "type": "module", 
   "main": "index.js",
-  "scripts": {
-    "start": "echo \"Error: no test specified\" && exit 1"
-  },
+"scripts": {
+  "start": "node src/server.js"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",

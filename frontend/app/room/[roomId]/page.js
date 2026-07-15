@@ -4,6 +4,18 @@ import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import * as mediasoupClient from 'mediasoup-client';
 import { useParams } from 'next/navigation';
+import {Video,Mic,MicOff,Camera,CameraOff,PhoneOff,Share2,Copy} from "lucide-react";
+import { useRouter } from "next/navigation";
+
+
+
+
+import RoomHeader from "@/components/room/RoomHeader";
+import VideoGrid from "@/components/room/VideoGrid";
+import BottomControls from "@/components/room/BottomControls";
+import ToastMessage from "@/components/room/ToastMessage";
+
+
 
 
 export default function Home() {
@@ -12,8 +24,11 @@ export default function Home() {
   const roomName = params.roomId;
   const socketRef = useRef(null);
   const localVideoRef = useRef(null);
+  const localStreamRef = useRef(null);
   const deviceRef = useRef(null);
   const producerTransportRef = useRef(null);
+  const participantStatesRef = useRef({});
+
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [message, setMessage] = useState('');
@@ -24,14 +39,28 @@ export default function Home() {
     if (!videoTrack) return;
     videoTrack.enabled = !videoTrack.enabled;
     setVideoEnabled(videoTrack.enabled);
+    socketRef.current.emit(
+      "video-state",
+      {
+        enabled: videoTrack.enabled
+      }
+    );
+
   };
 
 
   const toggleAudio = () => {
     const audioTrack = paramsRef.current.audioTrack;
     if (!audioTrack) return;
-    audioTrack.enabled = !audioTrack.enabled;
+    audioTrack.enabled =!audioTrack.enabled;
     setAudioEnabled(audioTrack.enabled);
+    socketRef.current.emit(
+      "audio-state",
+      {
+        enabled: audioTrack.enabled
+      }
+    );
+
   };
 
 
@@ -124,6 +153,61 @@ export default function Home() {
       }
     );
 
+    socket.on(
+      "audio-state",
+      ({peerId, enabled})=>{
+        setRemoteStreams(prev =>
+          prev.map(item =>
+            item.peerId === peerId?
+            {
+              ...item,
+              audioEnabled: enabled
+            }
+            :
+            item
+          )
+        );
+      }
+    );
+    socket.on(
+      "video-state",
+      ({peerId, enabled})=>{
+        setRemoteStreams(prev =>
+          prev.map(item =>
+            item.peerId === peerId?
+            {
+              ...item,
+              videoEnabled: enabled
+            }
+            :
+            item
+          )
+        );
+      }
+    );
+
+    socket.on(
+      "participant-state",({
+        peerId,
+        audioEnabled,
+        videoEnabled
+      })=>{
+        participantStatesRef.current[peerId] = {
+          audioEnabled,
+          videoEnabled
+        };
+      setRemoteStreams(prev=>
+    prev.map(item=>
+    item.peerId === peerId?
+    {
+      ...item,
+      audioEnabled,
+      videoEnabled
+    }: item
+    ));
+    });
+
+
     return () => {
       socket.disconnect();
     }
@@ -158,15 +242,25 @@ export default function Home() {
 
 
   const getLocalStream = async () => {
-    const stream =await navigator.mediaDevices
-        .getUserMedia({
-          audio: true,
-          video: {
-            width: 1280,
-            height: 720
-          }
-        });
-    localVideoRef.current.srcObject =stream;
+
+    const stream = await navigator.mediaDevices
+      .getUserMedia({
+        audio:true,
+        video:{
+          width:1280,
+          height:720
+        }
+      });
+
+
+    localStreamRef.current = stream;
+
+
+    if(localVideoRef.current){
+      localVideoRef.current.srcObject = stream;
+    }
+
+
     paramsRef.current = {
       ...paramsRef.current,
       videoTrack:
@@ -174,9 +268,20 @@ export default function Home() {
       audioTrack:
         stream.getAudioTracks()[0]
     };
+
+
     createProducerTransport();
   };
+  useEffect(() => {
+    if(
+      localVideoRef.current &&
+      localStreamRef.current
+    ){
+      localVideoRef.current.srcObject =
+        localStreamRef.current;
+    }
 
+  }, [remoteStreams]);
 
   const createProducerTransport =() => {
       socketRef.current.emit('createWebRtcTransport',{
@@ -345,16 +450,25 @@ export default function Home() {
               return [...prev];
             }
 
-            return [
+            const savedState = participantStatesRef.current[peerId]
+              ||
+              {
+              audioEnabled:true,
+              videoEnabled:true
+              };
+
+              return [
               ...prev,
               {
                 producerId,
                 peerId,
-                stream: new MediaStream([
+                stream:new MediaStream([
                   consumer.track
-                ])
+                ]),
+                audioEnabled:savedState.audioEnabled,
+                videoEnabled:savedState.videoEnabled
               }
-            ];
+              ];
           });
 
           socketRef.current.emit('consumer-resume',
@@ -367,181 +481,45 @@ export default function Home() {
     };
 
   return (
-  <div className="container">
-    <div className="floating-actions">
-            {message && (
-                <div className="message">
-                {message}
-                </div>
-            )}
+    <main
+className="
+min-h-screen
+h-screen
+bg-[#0d0d0d]
+text-white
+flex
+flex-col
+overflow-hidden
+">
 
-            <button
-                className="share-btn"
-                onClick={shareRoom}
-            >
-                 Share
-            </button>
-
-
-            <button
-                className="share-btn"
-                onClick={copyRoomLink}
-            >
-                🔗Copy Link
-            </button>
+<RoomHeader
+ roomName={roomName}
+ participantCount={remoteStreams.length + 1}
+/>
 
 
-            <button
-                className="share-btn"
-                onClick={copyRoomCode}
-            >
-                Copy Code
-            </button>
+<VideoGrid
+ remoteStreams={remoteStreams}
+ localVideoRef={localVideoRef}
+ audioEnabled={audioEnabled}
+ videoEnabled={videoEnabled}
+/>
 
 
-            </div>
+<BottomControls
+ audioEnabled={audioEnabled}
+ videoEnabled={videoEnabled}
+ toggleAudio={toggleAudio}
+ toggleVideo={toggleVideo}
+ copyRoomCode={copyRoomCode}
+ shareRoom={shareRoom}
+/>
+
+<ToastMessage
+  message={message}
+/>
 
 
-    <div className="grid">
-        <div className="card">
-          <h3>You</h3>
-
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="video"
-          />
-
-          <div className="controls">
-            <button
-              className="btn"
-              onClick={toggleVideo}
-            >
-              {videoEnabled
-                ? '📹 Turn Video Off'
-                : '📹 Turn Video On'}
-            </button>
-
-            <button
-              className="btn"
-              onClick={toggleAudio}
-            >
-              {audioEnabled
-                ? '🎤 Mute Mic'
-                : '🎤 Unmute Mic'}
-            </button>
-          </div>
-        </div>
-
-        {remoteStreams.map((item) => (
-          <div
-            key={item.producerId}
-            className="card"
-          >
-            <h3>Remote User</h3>
-
-            <video
-              autoPlay
-              playsInline
-              className="video"
-              ref={(video) => {
-                if (video) {
-                  video.srcObject = item.stream;
-                }
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      <style jsx>{`
-        .container {
-            min-height: 100vh;
-            padding: 20px;
-            position: relative;
-        }
-        .floating-actions {
-            position: fixed;
-            right: 25px;
-            bottom: 25px;
-
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            z-index: 10;
-        }
-        .share-btn {
-            width: 140px;
-            border: none;
-            padding: 12px;
-
-            border-radius: 30px;
-
-            cursor: pointer;
-            font-weight: 600;
-
-            background: #2563eb;
-            color: white;
-
-            box-shadow: 0 5px 15px rgba(0,0,0,0.25);
-        }
-        .share-btn:hover {
-            background: #1d4ed8;
-        }
-        .message {
-            background: white;
-            color: #16a34a;
-
-            padding: 8px 12px;
-            border-radius: 20px;
-
-            font-size: 14px;
-            text-align: center;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(
-            auto-fit,
-            minmax(320px, 1fr)
-            );
-            gap: 20px;
-        }
-        .card {
-            background: #1e1e1e;
-            border-radius: 12px;
-            padding: 12px;
-        }
-        .card h3 {
-            color: white;
-            margin-bottom: 10px;
-        }
-        .video {
-            width: 100%;
-            background: black;
-            border-radius: 8px;
-        }
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-        .btn {
-            border: none;
-            padding: 10px 14px;
-            border-radius: 8px;
-
-            cursor: pointer;
-            font-weight: 600;
-
-            background: #2563eb;
-            color: white;
-        }
-        .btn:hover {
-            background: #1d4ed8;
-        }
-`}</style>
-    </div>
-  );
+</main>
+);
 }
