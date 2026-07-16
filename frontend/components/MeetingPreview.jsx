@@ -1,29 +1,22 @@
-'use client';
+"use client";
 
 import { motion } from "framer-motion";
 import { Mic, Video, PhoneOff } from "lucide-react";
 
-
 export default function MeetingPreview() {
-
   return (
-
     <motion.div
-
       initial={{
-        opacity:0,
-        x:80
+        opacity: 0,
+        x: 80,
       }}
-
       animate={{
-        opacity:1,
-        x:0
+        opacity: 1,
+        x: 0,
       }}
-
       transition={{
-        duration:1
+        duration: 1,
       }}
-
       className="
         hidden
         lg:block
@@ -31,10 +24,7 @@ export default function MeetingPreview() {
         max-w-[420px]
         justify-self-center
       "
-
     >
-
-
       <div
         className="
           rounded-3xl
@@ -46,8 +36,6 @@ export default function MeetingPreview() {
           overflow-hidden
         "
       >
-
-
         {/* Header */}
 
         <div
@@ -60,34 +48,29 @@ export default function MeetingPreview() {
             bg-black/20
           "
         >
+          <span className="text-white font-semibold">Live Meeting</span>
 
-          <span className="text-white font-semibold">
-            Live Meeting
-          </span>
-
-
-          <div className="
+          <div
+            className="
             flex
             items-center
             gap-2
             text-red-400
             text-sm
-          ">
-            <span className="
+          "
+          >
+            <span
+              className="
               w-2
               h-2
               bg-red-500
               rounded-full
               animate-pulse
-            "/>
-
+            "
+            />
             LIVE
           </div>
-
-
         </div>
-
-
 
         {/* Video Area */}
 
@@ -103,8 +86,6 @@ export default function MeetingPreview() {
             gap-5
           "
         >
-
-
           {/* Fake users */}
 
           <div
@@ -124,7 +105,6 @@ export default function MeetingPreview() {
             👨‍💻
           </div>
 
-
           <div
             className="
               w-28
@@ -141,12 +121,7 @@ export default function MeetingPreview() {
           >
             👩‍💻
           </div>
-
-
         </div>
-
-
-
 
         {/* Controls */}
 
@@ -158,6 +133,17 @@ export default function MeetingPreview() {
             py-5
           "
         >
+          <button
+            className="
+              p-3
+              rounded-full
+              bg-white/10
+              text-white
+              hover:bg-white/20
+            "
+          >
+            <Mic size={22} />
+          </button>
 
           <button
             className="
@@ -168,22 +154,8 @@ export default function MeetingPreview() {
               hover:bg-white/20
             "
           >
-            <Mic size={22}/>
+            <Video size={22} />
           </button>
-
-
-          <button
-            className="
-              p-3
-              rounded-full
-              bg-white/10
-              text-white
-              hover:bg-white/20
-            "
-          >
-            <Video size={22}/>
-          </button>
-
 
           <button
             className="
@@ -193,18 +165,10 @@ export default function MeetingPreview() {
               text-white
             "
           >
-            <PhoneOff size={22}/>
+            <PhoneOff size={22} />
           </button>
-
-
         </div>
-
-
-
       </div>
-
-
     </motion.div>
-
   );
 }

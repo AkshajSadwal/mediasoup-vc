@@ -3,21 +3,18 @@ import HeroSection from "@/components/HeroSection";
 import MeetingPreview from "@/components/MeetingPreview";
 import Navbar from "@/components/Navbar";
 
-
 export default function Home() {
-
   return (
-
-    <main className="
+    <main
+      className="
       relative
       min-h-screen
       overflow-hidden
-    ">
-
+    "
+    >
       <AuroraBackground />
 
       <Navbar />
-
 
       <div
         className="
@@ -31,7 +28,6 @@ export default function Home() {
           pt-24
         "
       >
-
         <div
           className="
             w-full
@@ -43,18 +39,11 @@ export default function Home() {
             items-center
           "
         >
-
           <HeroSection />
 
           <MeetingPreview />
-
         </div>
-
       </div>
-
-
     </main>
-
   );
-
 }

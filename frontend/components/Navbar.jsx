@@ -1,33 +1,25 @@
-'use client';
+"use client";
 
 import { motion } from "framer-motion";
 import { Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-
 export default function Navbar() {
-
   const router = useRouter();
 
-
   return (
-
     <motion.nav
-
       initial={{
-        opacity:0,
-        y:-30
+        opacity: 0,
+        y: -30,
       }}
-
       animate={{
-        opacity:1,
-        y:0
+        opacity: 1,
+        y: 0,
       }}
-
       transition={{
-        duration:.7
+        duration: 0.7,
       }}
-
       className="
         fixed
         top-6
@@ -37,9 +29,7 @@ export default function Navbar() {
         w-[90%]
         max-w-6xl
       "
-
     >
-
       <div
         className="
           flex
@@ -55,8 +45,6 @@ export default function Navbar() {
           shadow-xl
         "
       >
-
-
         {/* Logo */}
 
         <div
@@ -68,7 +56,6 @@ export default function Navbar() {
           "
           onClick={() => router.push("/")}
         >
-
           <div
             className="
               p-2
@@ -78,12 +65,8 @@ export default function Navbar() {
               to-blue-600
             "
           >
-            <Video
-              size={22}
-              className="text-white"
-            />
+            <Video size={22} className="text-white" />
           </div>
-
 
           <span
             className="
@@ -94,10 +77,7 @@ export default function Navbar() {
           >
             Rauma
           </span>
-
         </div>
-
-
 
         {/* Links */}
 
@@ -110,7 +90,6 @@ export default function Navbar() {
             text-white/70
           "
         >
-
           <a
             className="
               hover:text-white
@@ -119,7 +98,6 @@ export default function Navbar() {
           >
             Features
           </a>
-
 
           <a
             className="
@@ -130,7 +108,6 @@ export default function Navbar() {
             Security
           </a>
 
-
           <a
             className="
               hover:text-white
@@ -139,21 +116,15 @@ export default function Navbar() {
           >
             About
           </a>
-
-
         </div>
-
-
 
         {/* Button */}
 
         <button
-
           onClick={() => {
             const id = crypto.randomUUID();
             router.push(`/room/${id}`);
           }}
-
           className="
             hidden
             sm:block
@@ -167,18 +138,10 @@ export default function Navbar() {
             transition
             shadow-lg
           "
-
         >
-
           Create Room
-
         </button>
-
-
       </div>
-
-
     </motion.nav>
-
   );
 }

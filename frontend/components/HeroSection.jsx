@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,23 +19,23 @@ export default function HeroSection() {
     router.push(`/room/${roomId}`);
   };
 
-
   return (
-    <section className="
+    <section
+      className="
     w-full
-    ">
-
+    "
+    >
       <motion.div
         initial={{
-          opacity:0,
-          y:50
+          opacity: 0,
+          y: 50,
         }}
         animate={{
-          opacity:1,
-          y:0
+          opacity: 1,
+          y: 0,
         }}
         transition={{
-          duration:0.8
+          duration: 0.8,
         }}
         className="
           w-full
@@ -48,54 +48,52 @@ export default function HeroSection() {
           p-10
         "
       >
-
         {/* Icon */}
-        <div className="
+        <div
+          className="
           flex
           justify-center
           mb-6
-        ">
-          <div className="
+        "
+        >
+          <div
+            className="
             p-5
             rounded-full
             bg-white/20
             shadow-lg
-          ">
-            <Video
-              size={45}
-              className="text-white"
-            />
+          "
+          >
+            <Video size={45} className="text-white" />
           </div>
         </div>
 
-
         {/* Heading */}
-        <h1 className="
+        <h1
+          className="
           text-center
           text-5xl
           md:text-6xl
           font-bold
           text-white
           tracking-tight
-        ">
+        "
+        >
           Video Meetings
           <br />
-          <span className="text-cyan-300">
-            Reimagined
-          </span>
+          <span className="text-cyan-300">Reimagined</span>
         </h1>
 
-
-        <p className="
+        <p
+          className="
           mt-5
           text-center
           text-white/70
           text-lg
-        ">
-          Create secure HD video rooms instantly.
-          Connect with anyone, anywhere.
+        "
+        >
+          Create secure HD video rooms instantly. Connect with anyone, anywhere.
         </p>
-
 
         {/* Create Button */}
         <button
@@ -125,28 +123,25 @@ export default function HeroSection() {
           Create New Room
         </button>
 
-
         {/* Divider */}
-        <div className="
+        <div
+          className="
           flex
           items-center
           gap-4
           my-8
-        ">
-          <div className="h-px bg-white/30 flex-1"/>
-          <span className="text-white/60">
-            OR
-          </span>
-          <div className="h-px bg-white/30 flex-1"/>
+        "
+        >
+          <div className="h-px bg-white/30 flex-1" />
+          <span className="text-white/60">OR</span>
+          <div className="h-px bg-white/30 flex-1" />
         </div>
-
 
         {/* Join */}
         <div className="flex gap-3">
-
           <input
             value={roomId}
-            onChange={(e)=>setRoomId(e.target.value)}
+            onChange={(e) => setRoomId(e.target.value)}
             placeholder="Enter Room ID"
             className="
               flex-1
@@ -177,27 +172,24 @@ export default function HeroSection() {
           >
             <LogIn />
           </button>
-
         </div>
 
-
         {/* Features */}
-        <div className="
+        <div
+          className="
           mt-8
           flex
           justify-center
           gap-6
           text-sm
           text-white/70
-        ">
+        "
+        >
           <span>⚡ Fast</span>
           <span>🔒 Secure</span>
           <span>🎥 HD</span>
         </div>
-
-
       </motion.div>
-
     </section>
   );
 }

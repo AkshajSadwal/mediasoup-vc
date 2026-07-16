@@ -1,9 +1,8 @@
-'use client';
+"use client";
 
 export default function AuroraBackground() {
   return (
     <div className="absolute inset-0 overflow-hidden">
-
       {/* Aurora Video */}
       <video
         autoPlay
@@ -21,7 +20,6 @@ export default function AuroraBackground() {
         <source src="/videos/aurora.mp4" type="video/mp4" />
       </video>
 
-
       {/* Dark cinematic overlay */}
       <div
         className="
@@ -30,7 +28,6 @@ export default function AuroraBackground() {
           bg-black/50
         "
       />
-
 
       {/* Blue-green color tint */}
       <div
@@ -44,7 +41,6 @@ export default function AuroraBackground() {
         "
       />
 
-
       {/* Optional animated light glow */}
       <div
         className="
@@ -53,7 +49,6 @@ export default function AuroraBackground() {
           bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,.6)_100%)]
         "
       />
-
     </div>
   );
 }
