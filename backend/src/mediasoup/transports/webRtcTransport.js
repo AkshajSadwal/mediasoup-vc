@@ -3,8 +3,8 @@ const createWebRtcTransport = async (router) => {
     await router.createWebRtcTransport({
       listenIps: [
         {
-          ip: "127.0.0.1",
-          announcedIp: null,
+        ip: process.env.MEDIASOUP_LISTEN_IP,
+        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || null,
         },
       ],
       enableUdp: true,

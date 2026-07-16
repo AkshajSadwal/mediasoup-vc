@@ -1,4 +1,16 @@
-node_modules/
-.next/
-.env
-.env.local
+# Dependencies
+**/node_modules/
+
+# Next.js build files
+frontend/.next/
+
+# Environment files
+**/.env
+**/.env.local
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

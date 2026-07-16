@@ -21,8 +21,8 @@ const mediaCodecs = [
 
 export const initializeWorker = async () => {
   worker = await mediasoup.createWorker({
-    rtcMinPort: 2000,
-    rtcMaxPort: 2020,
+    rtcMinPort: Number(process.env.MEDIASOUP_RTC_MIN_PORT),
+    rtcMaxPort: Number(process.env.MEDIASOUP_RTC_MAX_PORT),
   });
 
   console.log(`worker pid ${worker.pid}`);
