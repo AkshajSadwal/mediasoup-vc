@@ -102,7 +102,9 @@ export default function Home() {
   const consumerTransports = useRef([]);
 
   useEffect(() => {
-    const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}/mediasoup`);
+    const socketUrl =process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+    const socket = io(`${socketUrl}/mediasoup`);
+
     socketRef.current = socket;
     socket.on("connect", () => {
       console.log("connected", socket.id);
