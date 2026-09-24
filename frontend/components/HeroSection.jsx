@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Video, PlusCircle, LogIn } from "lucide-react";
+import { Video, PlusCircle, LogIn, CalendarClock } from "lucide-react";
 
 export default function HeroSection() {
   const router = useRouter();
@@ -121,6 +121,15 @@ export default function HeroSection() {
         >
           <PlusCircle />
           Create New Room
+        </button>
+
+        {/* Schedule */}
+        <button
+          onClick={() => router.push("/schedule")}
+          className="mt-3 w-full flex items-center justify-center gap-3 py-3 rounded-xl font-semibold border border-white/20 bg-white/10 text-white hover:bg-white/15 transition"
+        >
+          <CalendarClock size={20} />
+          Schedule Meeting
         </button>
 
         {/* Divider */}

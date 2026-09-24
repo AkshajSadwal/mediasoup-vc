@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import * as mediasoupClient from "mediasoup-client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 import RoomHeader from "@/components/room/RoomHeader";
 import VideoGrid from "@/components/room/VideoGrid";
@@ -13,6 +14,8 @@ import ToastMessage from "@/components/room/ToastMessage";
 export default function Home() {
   const params = useParams();
   const roomName = params.roomId;
+  const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
 
   const socketRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -766,6 +769,14 @@ export default function Home() {
           if (!isCurrentSession(generation, socketId)) return;
 
           if (response?.error) {
+            if (response.error === "AUTH_REQUIRED") {
+              router.replace(`/login?callbackUrl=${encodeURIComponent(`/room/${roomName}`)}`);
+              return;
+            }
+            if (response.error === "WAITING_ROOM") {
+              router.replace(`/waiting/${roomName}`);
+              return;
+            }
             throw new Error(response.error);
           }
 
@@ -833,15 +844,49 @@ export default function Home() {
   };
 
   useEffect(() => {
-    mountedRef.current = true;
+    if (sessionStatus === "loading") return;
 
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
-    const socket = io(`${socketUrl}/mediasoup`, {
-      path: "/socket.io",
-      reconnection: true,
-    });
+    let cancelled = false;
+    let socket = null;
 
-    socketRef.current = socket;
+    const begin = async () => {
+      if (!session?.backendToken) {
+        router.replace(`/login?callbackUrl=${encodeURIComponent(`/room/${roomName}`)}`);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"}/api/meetings/${roomName}`, {
+          headers: { Authorization: `Bearer ${session.backendToken}` },
+        });
+
+        if (response.ok) {
+          const meeting = await response.json();
+          if (!meeting.open) {
+            router.replace(`/waiting/${roomName}`);
+            return;
+          }
+        } else if (response.status !== 404) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || `Meeting check failed (${response.status}).`);
+        }
+      } catch (error) {
+        console.error("MEETING CHECK FAILED", error);
+        showMessage(error.message || "Could not check meeting.");
+        return;
+      }
+
+      if (cancelled) return;
+
+      mountedRef.current = true;
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+      socket = io(`${socketUrl}/mediasoup`, {
+        path: "/socket.io",
+        reconnection: true,
+        auth: { token: session.backendToken },
+      });
+
+      socketRef.current = socket;
 
     socket.on("connect", () => {
       connectionGenerationRef.current += 1;
@@ -953,11 +998,18 @@ export default function Home() {
       );
     });
 
+    };
+
+    begin();
+
     return () => {
+      cancelled = true;
       mountedRef.current = false;
       connectionGenerationRef.current += 1;
       joinInProgressRef.current = false;
-      socket.disconnect();
+      socket?.disconnect();
+      socket = null;
+      socketRef.current = null;
       cleanupMedia({ stopLocalTracks: true });
 
       participantStatesRef.current = {};
@@ -966,7 +1018,7 @@ export default function Home() {
       setRemoteStreams([]);
       setParticipants([]);
     };
-  }, [roomName]);
+  }, [roomName, router, session?.backendToken, sessionStatus]);
 
   return (
     <main

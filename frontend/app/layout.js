@@ -1,15 +1,16 @@
 import "./globals.css";
+import AuthProvider from "@/components/auth/AuthProvider";
 
 export const metadata = {
-  title: "Video Meeting",
-  description: "Mediasoup video calling app",
+  title: "Rauma",
+  description: "Video meetings with scheduled rooms",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

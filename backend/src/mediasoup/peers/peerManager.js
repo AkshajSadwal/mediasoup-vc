@@ -2,12 +2,12 @@ import Peer from "./Peer.js";
 
 const peers = {};
 
-export const createPeer = (socket, roomName) => {
+export const createPeer = (socket, roomName, user = null) => {
   if (peers[socket.id]) {
     return peers[socket.id];
   }
 
-  peers[socket.id] = new Peer(socket, roomName);
+  peers[socket.id] = new Peer(socket, roomName, user);
   return peers[socket.id];
 };
 
