@@ -26,6 +26,12 @@ export const transportProduce = async (
       rtpParameters,
     });
 
+    // A room-level admin mute must apply to a freshly created producer too.
+    // This closes the refresh/reconnect bypass on the actual media server.
+    if (kind === "audio" && peer.forcedAudioMuted) {
+      await producer.pause();
+    }
+
     addProducer({
       producer,
       roomName: peer.roomName,

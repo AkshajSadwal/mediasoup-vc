@@ -9,6 +9,7 @@ export default function RemoteVideo({
   name,
   audioEnabled = true,
   videoEnabled = true,
+  isAdmin = false,
 }) {
   const videoRef = useRef(null);
   const [playBlocked, setPlayBlocked] = useState(false);
@@ -288,6 +289,9 @@ export default function RemoteVideo({
       >
         <span
           className="
+            flex
+            items-center
+            gap-2
             rounded-full
             bg-black/50
             px-4
@@ -297,6 +301,11 @@ export default function RemoteVideo({
           "
         >
           {name}
+          {isAdmin && (
+            <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+              Admin
+            </span>
+          )}
         </span>
 
         <div

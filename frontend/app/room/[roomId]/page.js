@@ -10,6 +10,7 @@ import RoomHeader from "@/components/room/RoomHeader";
 import VideoGrid from "@/components/room/VideoGrid";
 import BottomControls from "@/components/room/BottomControls";
 import ToastMessage from "@/components/room/ToastMessage";
+import MeetingPanel from "@/components/room/MeetingPanel";
 
 export default function Home() {
   const params = useParams();
@@ -37,10 +38,21 @@ export default function Home() {
   const upsertParticipant = (participant) => {
     if (!participant?.peerId) return;
 
+    // The local participant is rendered separately from the remote list.
+    // Ignore self state broadcasts so moderation/status updates never add
+    // the current user as an extra participant.
+    if (socketRef.current?.id && participant.peerId === socketRef.current.id) {
+      return;
+    }
+
     participantStatesRef.current[participant.peerId] = {
       audioEnabled: participant.audioEnabled ?? true,
       videoEnabled: participant.videoEnabled ?? true,
       connected: participant.connected ?? true,
+      name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
+      username: participant.username || null,
+      isAdmin: Boolean(participant.isAdmin),
+      adminMuted: Boolean(participant.adminMuted),
     };
 
     setParticipants((prev) => {
@@ -56,9 +68,13 @@ export default function Home() {
 
       return [...prev, {
         peerId: participant.peerId,
+        username: participant.username || null,
+        name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
         audioEnabled: participant.audioEnabled ?? true,
         videoEnabled: participant.videoEnabled ?? true,
         connected: participant.connected ?? true,
+        isAdmin: Boolean(participant.isAdmin),
+        adminMuted: Boolean(participant.adminMuted),
       }];
     });
   };
@@ -92,6 +108,55 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [remoteStreams, setRemoteStreams] = useState([]);
   const [participants, setParticipants] = useState([]);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState("chat");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatDraft, setChatDraft] = useState("");
+  const [adminBusyPeerId, setAdminBusyPeerId] = useState(null);
+  const [localParticipantInfo, setLocalParticipantInfo] = useState(null);
+  const [adminMuted, setAdminMuted] = useState(false);
+
+  const localName = session?.user?.username || session?.user?.name || "You";
+  const localPeerId = socketRef.current?.id || null;
+  const localIsAdmin = Boolean(localParticipantInfo?.isAdmin);
+
+  const openPanel = (tab = "chat") => {
+    setPanelTab(tab);
+    setPanelOpen(true);
+  };
+
+  const sendChatMessage = (event) => {
+    event.preventDefault();
+    const text = chatDraft.trim();
+    if (!text || !socketRef.current?.connected) return;
+
+    socketRef.current.emit("chat-message", { text }, (response) => {
+      if (response?.error) {
+        showMessage(response.error);
+        return;
+      }
+      setChatDraft("");
+    });
+  };
+
+  const adminMuteParticipant = (targetPeerId, muted) => {
+    if (!socketRef.current || !localIsAdmin) return;
+    setAdminBusyPeerId(targetPeerId);
+    socketRef.current.emit("admin-mute-participant", { targetPeerId, muted }, (response) => {
+      setAdminBusyPeerId(null);
+      if (response?.error) showMessage(response.error);
+    });
+  };
+
+  const adminRemoveParticipant = (targetPeerId) => {
+    if (!socketRef.current || !localIsAdmin) return;
+    setAdminBusyPeerId(targetPeerId);
+    socketRef.current.emit("admin-remove-participant", { targetPeerId }, (response) => {
+      setAdminBusyPeerId(null);
+      if (response?.error) showMessage(response.error);
+      else showMessage("Participant removed");
+    });
+  };
 
   const paramsRef = useRef({
     encodings: [
@@ -129,6 +194,10 @@ export default function Home() {
 
     videoTrack.enabled = !videoTrack.enabled;
     setVideoEnabled(videoTrack.enabled);
+    setLocalParticipantInfo((prev) => ({
+      ...(prev || {}),
+      videoEnabled: videoTrack.enabled,
+    }));
 
     socketRef.current.emit("video-state", {
       enabled: videoTrack.enabled,
@@ -139,11 +208,22 @@ export default function Home() {
     const audioTrack = paramsRef.current.audioTrack;
     if (!audioTrack || !socketRef.current) return;
 
-    audioTrack.enabled = !audioTrack.enabled;
-    setAudioEnabled(audioTrack.enabled);
+    const nextEnabled = !audioTrack.enabled;
+    if (adminMuted && nextEnabled) {
+      showMessage("The admin has muted your microphone.");
+      return;
+    }
+
+    audioTrack.enabled = nextEnabled;
+    setAudioEnabled(nextEnabled);
+    setLocalParticipantInfo((prev) => ({
+      ...(prev || {}),
+      audioEnabled: nextEnabled,
+      adminMuted,
+    }));
 
     socketRef.current.emit("audio-state", {
-      enabled: audioTrack.enabled,
+      enabled: nextEnabled,
     });
   };
 
@@ -678,7 +758,7 @@ export default function Home() {
     });
   };
 
-  const getLocalStream = async (generation, socketId) => {
+  const getLocalStream = async (generation, socketId, forcedAdminMuted = false) => {
     let stream = localStreamRef.current;
 
     if (!stream) {
@@ -709,11 +789,29 @@ export default function Home() {
       localVideoRef.current.srcObject = stream;
     }
 
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+
+    // Preserve the user's current media choices across a reconnect, but let
+    // the server-authoritative admin mute override microphone state.
+    if (audioTrack && forcedAdminMuted) {
+      audioTrack.enabled = false;
+    }
+
     paramsRef.current = {
       ...paramsRef.current,
-      videoTrack: stream.getVideoTracks()[0],
-      audioTrack: stream.getAudioTracks()[0],
+      videoTrack,
+      audioTrack,
     };
+
+    setAudioEnabled(audioTrack ? audioTrack.enabled : false);
+    setVideoEnabled(videoTrack ? videoTrack.enabled : false);
+    setLocalParticipantInfo((prev) => ({
+      ...(prev || {}),
+      audioEnabled: audioTrack ? audioTrack.enabled : false,
+      videoEnabled: videoTrack ? videoTrack.enabled : false,
+      adminMuted: forcedAdminMuted,
+    }));
 
     await createProducerTransport(generation, socketId);
     await produce();
@@ -784,6 +882,9 @@ export default function Home() {
             throw new Error("Room did not return RTP capabilities.");
           }
 
+          setLocalParticipantInfo(response.self || null);
+          setAdminMuted(Boolean(response.self?.adminMuted));
+
           setParticipants(
             Array.isArray(response.participants)
               ? response.participants
@@ -796,6 +897,10 @@ export default function Home() {
               audioEnabled: participant.audioEnabled ?? true,
               videoEnabled: participant.videoEnabled ?? true,
               connected: true,
+              name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
+              username: participant.username || null,
+              isAdmin: Boolean(participant.isAdmin),
+              adminMuted: Boolean(participant.adminMuted),
             };
           }
 
@@ -811,7 +916,11 @@ export default function Home() {
           if (!isCurrentSession(generation, socketId)) return;
 
           flushPendingProducerSignals();
-          await getLocalStream(generation, socketId);
+          await getLocalStream(
+            generation,
+            socketId,
+            Boolean(response.self?.adminMuted),
+          );
           if (!isCurrentSession(generation, socketId)) return;
 
           requestExistingProducers();
@@ -968,10 +1077,11 @@ export default function Home() {
       );
     });
 
-    socket.on("audio-state", ({ peerId, enabled }) => {
+    socket.on("audio-state", ({ peerId, enabled, mutedByAdmin }) => {
       upsertParticipant({
         peerId,
         audioEnabled: enabled,
+        adminMuted: Boolean(mutedByAdmin),
       });
 
       setRemoteStreams((prev) =>
@@ -998,6 +1108,39 @@ export default function Home() {
       );
     });
 
+    socket.on("chat-history", (messages) => {
+      setChatMessages(Array.isArray(messages) ? messages : []);
+    });
+
+    socket.on("chat-message", (chatMessage) => {
+      if (!chatMessage?.id) return;
+      setChatMessages((prev) => {
+        if (prev.some((item) => item.id === chatMessage.id)) return prev;
+        return [...prev, chatMessage].slice(-200);
+      });
+    });
+
+    socket.on("admin-audio-state", ({ enabled, mutedByAdmin }) => {
+      const track = paramsRef.current.audioTrack;
+      if (track) track.enabled = Boolean(enabled);
+      setAudioEnabled(Boolean(enabled));
+      setAdminMuted(Boolean(mutedByAdmin));
+      setLocalParticipantInfo((prev) => ({
+        ...(prev || {}),
+        peerId: socket.id,
+        audioEnabled: Boolean(enabled),
+        adminMuted: Boolean(mutedByAdmin),
+      }));
+      if (mutedByAdmin) showMessage("The admin muted your microphone.");
+      else showMessage("The admin allowed your microphone.");
+    });
+
+    socket.on("admin-removed", ({ reason }) => {
+      showMessage(reason || "You were removed from the meeting.");
+      socket.disconnect();
+      setTimeout(() => router.replace("/"), 250);
+    });
+
     };
 
     begin();
@@ -1013,6 +1156,8 @@ export default function Home() {
       cleanupMedia({ stopLocalTracks: true });
 
       participantStatesRef.current = {};
+      setLocalParticipantInfo(null);
+      setAdminMuted(false);
       pendingProducerSignalsRef.current.clear();
       closedProducerIdsRef.current.clear();
       setRemoteStreams([]);
@@ -1035,6 +1180,8 @@ export default function Home() {
       <RoomHeader
         roomName={roomName}
         participantCount={participants.length + 1}
+        localName={localName}
+        localIsAdmin={localIsAdmin}
       />
 
       <VideoGrid
@@ -1042,6 +1189,9 @@ export default function Home() {
         localVideoRef={localVideoRef}
         audioEnabled={audioEnabled}
         videoEnabled={videoEnabled}
+        participants={participants}
+        localName={localName}
+        localIsAdmin={localIsAdmin}
       />
 
       <BottomControls
@@ -1051,6 +1201,28 @@ export default function Home() {
         toggleVideo={toggleVideo}
         copyRoomCode={copyRoomCode}
         shareRoom={shareRoom}
+        openPanel={openPanel}
+      />
+
+      <MeetingPanel
+        open={panelOpen}
+        tab={panelTab}
+        onTabChange={setPanelTab}
+        onClose={() => setPanelOpen(false)}
+        messages={chatMessages}
+        draft={chatDraft}
+        setDraft={setChatDraft}
+        onSendMessage={sendChatMessage}
+        participants={participants}
+        localPeerId={localPeerId}
+        localName={localName}
+        localAudioEnabled={audioEnabled}
+        localVideoEnabled={videoEnabled}
+        localAdminMuted={adminMuted}
+        isAdmin={localIsAdmin}
+        onAdminMute={adminMuteParticipant}
+        onAdminRemove={adminRemoveParticipant}
+        adminBusyPeerId={adminBusyPeerId}
       />
 
       <ToastMessage message={message} />

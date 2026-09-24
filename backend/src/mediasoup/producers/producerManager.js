@@ -68,6 +68,12 @@ export const removeProducers = (socketId) => {
   }
 };
 
+
+export const getProducersByPeer = (socketId, kind = null) =>
+  producers.filter(
+    (item) => item.socketId === socketId && (!kind || item.producer.kind === kind),
+  );
+
 export const getProducers = () => producers;
 export const closeAllProducers = () => {
   while (producers.length > 0) {

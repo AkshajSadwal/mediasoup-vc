@@ -8,6 +8,9 @@ export default function VideoGrid({
   localVideoRef,
   audioEnabled,
   videoEnabled,
+  participants = [],
+  localName = "You",
+  localIsAdmin = false,
 }) {
 
 return (
@@ -60,18 +63,21 @@ xl:grid-cols-3
 >
 
 {
-  remoteStreams.map((item,index)=>(
+  remoteStreams.map((item, index) => {
+    const participant = participants.find((entry) => entry.peerId === item.peerId);
 
-    <RemoteVideo
-      key={item.peerId}
-      stream={item.stream}
-      trackSignature={item.trackSignature}
-      name={`Remote User ${index + 1}`}
-      audioEnabled={item.audioEnabled}
-      videoEnabled={item.videoEnabled}
-    />
-
-  ))
+    return (
+      <RemoteVideo
+        key={item.peerId}
+        stream={item.stream}
+        trackSignature={item.trackSignature}
+        name={participant?.username || participant?.name || `Remote User ${index + 1}`}
+        audioEnabled={item.audioEnabled}
+        videoEnabled={item.videoEnabled}
+        isAdmin={Boolean(participant?.isAdmin)}
+      />
+    );
+  })
 }
 
 </div>
@@ -87,6 +93,8 @@ xl:grid-cols-3
  localVideoRef={localVideoRef}
  audioEnabled={audioEnabled}
  videoEnabled={videoEnabled}
+ name={localName}
+ isAdmin={localIsAdmin}
 />
 
 

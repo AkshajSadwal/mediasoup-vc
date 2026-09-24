@@ -6,6 +6,8 @@ export default function LocalVideo({
   localVideoRef,
   audioEnabled,
   videoEnabled,
+  name = "You",
+  isAdmin = false,
 }) {
 
   return (
@@ -73,7 +75,6 @@ export default function LocalVideo({
           justify-between
         "
       >
-
         <span
           className="
             rounded-full
@@ -84,38 +85,25 @@ export default function LocalVideo({
             backdrop-blur
           "
         >
-          You
+          <span className="flex items-center gap-2">
+            {name}
+            {isAdmin && (
+              <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+                Admin
+              </span>
+            )}
+          </span>
         </span>
 
-
-
-        <div
-          className="
-            flex
-            gap-2
-          "
-        >
-
-          <div
-            className="
-              rounded-full
-              bg-black/60
-              p-2
-            "
-          >
-            {audioEnabled
-              ?
-              <Mic size={16}/>
-              :
-              <MicOff
-                size={16}
-                className="text-red-400"
-              />
-            }
+        <div className="flex gap-2">
+          <div className="rounded-full bg-black/60 p-2">
+            {audioEnabled ? (
+              <Mic size={16} />
+            ) : (
+              <MicOff size={16} className="text-red-400" />
+            )}
           </div>
-
         </div>
-
       </div>
 
 

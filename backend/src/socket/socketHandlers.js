@@ -28,6 +28,8 @@ import {
   deletePeer,
 } from "../mediasoup/peers/peerManager.js";
 import { removePeerFromRoom } from "../mediasoup/rooms/roomManager.js";
+import { getChatHistory, sendChatMessage } from "./events/chat.events.js";
+import { adminSetAudioMuted, adminRemoveParticipant } from "./events/admin.events.js";
 
 const registerSocketHandlers = (socket) => {
   console.log("connected:", socket.id);
@@ -80,6 +82,22 @@ const registerSocketHandlers = (socket) => {
 
   socket.on("video-state", (data) =>
     videoState(socket, data),
+  );
+
+  socket.on("get-chat-history", (callback) =>
+    getChatHistory(socket, callback),
+  );
+
+  socket.on("chat-message", (data, callback) =>
+    sendChatMessage(socket, data, callback),
+  );
+
+  socket.on("admin-mute-participant", (data, callback) =>
+    adminSetAudioMuted(socket, data, callback),
+  );
+
+  socket.on("admin-remove-participant", (data, callback) =>
+    adminRemoveParticipant(socket, data, callback),
   );
 
   socket.on("disconnect", () => {

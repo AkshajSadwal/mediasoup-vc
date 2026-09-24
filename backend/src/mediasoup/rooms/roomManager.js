@@ -7,7 +7,7 @@ import {
 const rooms = {};
 const roomCreationPromises = new Map();
 
-export const createRoom = async (roomName, socketId) => {
+export const createRoom = async (roomName, socketId, adminUserId = null) => {
   const existingRoom = rooms[roomName];
 
   if (existingRoom) {
@@ -31,6 +31,7 @@ export const createRoom = async (roomName, socketId) => {
         roomName,
         router,
         socketId,
+        adminUserId,
       );
 
       rooms[roomName] = room;

@@ -7,7 +7,9 @@ import {
   VideoOff,
   Copy,
   Share2,
-  PhoneOff
+  PhoneOff,
+  MessageCircle,
+  Users
 } from "lucide-react";
 
 import { useRouter } from "next/navigation";
@@ -19,7 +21,8 @@ export default function BottomControls({
   toggleAudio,
   toggleVideo,
   copyRoomCode,
-  shareRoom
+  shareRoom,
+  openPanel
 }) {
 
   const router = useRouter();
@@ -135,6 +138,26 @@ export default function BottomControls({
           "
         >
           <Share2 />
+        </button>
+
+        {/* Chat */}
+
+        <button
+          onClick={() => openPanel?.("chat")}
+          className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center"
+          title="Chat"
+        >
+          <MessageCircle />
+        </button>
+
+        {/* Participants */}
+
+        <button
+          onClick={() => openPanel?.("participants")}
+          className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center"
+          title="Participants"
+        >
+          <Users />
         </button>
 
         {/* Hangup */}

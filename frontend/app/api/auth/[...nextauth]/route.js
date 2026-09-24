@@ -41,6 +41,8 @@ const authOptions = {
         token.backendToken = user.authToken;
         token.userId = user.user?.id || user.id;
         token.username = user.user?.username || user.username;
+        token.name = user.user?.name || user.name || token.username;
+        token.image = user.user?.image || user.image || null;
       }
 
       if (account?.provider === "google" && profile?.sub && !token.backendToken) {
@@ -63,6 +65,8 @@ const authOptions = {
         token.backendToken = data.authToken;
         token.userId = data.user.id;
         token.username = data.user.username;
+        token.name = data.user.name || data.user.username;
+        token.image = data.user.image || null;
       }
 
       return token;
@@ -71,6 +75,8 @@ const authOptions = {
       if (session.user) {
         session.user.id = token.userId;
         session.user.username = token.username;
+        session.user.name = token.name || token.username;
+        session.user.image = token.image || null;
       }
       session.backendToken = token.backendToken;
       return session;

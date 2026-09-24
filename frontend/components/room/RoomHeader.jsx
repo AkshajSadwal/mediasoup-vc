@@ -5,6 +5,8 @@ import { Video, Users } from 'lucide-react';
 export default function RoomHeader({
   roomName,
   participantCount = 1,
+  localName = "You",
+  localIsAdmin = false,
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur-xl">
@@ -43,6 +45,11 @@ export default function RoomHeader({
             <span className="text-sm text-gray-300">
               {participantCount}
             </span>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2">
+            <span className="max-w-40 truncate text-sm font-medium text-white">{localName}</span>
+            {localIsAdmin && <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">Admin</span>}
           </div>
 
           <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2">
