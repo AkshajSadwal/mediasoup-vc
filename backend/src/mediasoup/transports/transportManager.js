@@ -1,4 +1,7 @@
-import {addTransportToPeer,} from "../peers/peerManager.js";
+import {
+  addTransportToPeer,
+  removeTransportFromPeer,
+} from "../peers/peerManager.js";
 
 const transports = [];
 
@@ -8,64 +11,70 @@ export const addTransport = ({
   socketId,
   consumer,
 }) => {
-  transports.push({
+  const transportData = {
     transport,
     roomName,
     socketId,
     consumer,
+  };
+
+  transports.push(transportData);
+  addTransportToPeer(socketId, transport.id);
+
+  transport.on("close", () => {
+    removeTransportRecord(transport.id);
   });
 
-  addTransportToPeer(
-    socketId,
-    transport.id
-  );
+  return transportData;
 };
 
-export const getTransport = (
-  socketId,
-  consumer = false
-) => {
-  const transportData =transports.find(
-      (t) =>
-        t.socketId === socketId &&
-        t.consumer === consumer
-    );
+export const getTransport = (socketId, consumer = false) => {
+  const transportData = transports.find(
+    (item) =>
+      item.socketId === socketId &&
+      item.consumer === consumer &&
+      !item.transport.closed,
+  );
+
   return transportData?.transport;
 };
 
 export const getTransportById = (transportId) => {
   return transports.find(
-    (t) =>
-      t.transport.id === transportId
+    (item) =>
+      item.transport.id === transportId &&
+      !item.transport.closed,
   );
 };
 
-export const removeTransports = (socketId) => {
-  transports.forEach((item) => {
-    if (item.socketId === socketId) {
-      item.transport.close();
-    }
-  });
+const removeTransportRecord = (transportId) => {
+  const index = transports.findIndex(
+    (item) => item.transport.id === transportId,
+  );
 
-  const filtered =transports.filter(
-      (item) =>
-        item.socketId !== socketId
-    );
+  if (index === -1) return;
 
-  transports.length = 0;
-  transports.push(...filtered);
+  const [item] = transports.splice(index, 1);
+  removeTransportFromPeer(item.socketId, transportId);
 };
 
 export const removeTransportById = (transportId) => {
-  const filtered =
-    transports.filter(
-      (t) =>
-        t.transport.id !== transportId
-    );
+  const item = getTransportById(transportId);
+  if (!item) return;
 
-  transports.length = 0;
-  transports.push(...filtered);
+  item.transport.close();
+  removeTransportRecord(transportId);
 };
 
-export const getTransports = () =>
-  transports;
+export const removeTransports = (socketId) => {
+  const peerTransports = transports.filter(
+    (item) => item.socketId === socketId,
+  );
+
+  for (const item of peerTransports) {
+    item.transport.close();
+    removeTransportRecord(item.transport.id);
+  }
+};
+
+export const getTransports = () => transports;

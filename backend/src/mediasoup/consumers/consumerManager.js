@@ -1,4 +1,7 @@
-import {addConsumerToPeer} from "../peers/peerManager.js";
+import {
+  addConsumerToPeer,
+  removeConsumerFromPeer,
+} from "../peers/peerManager.js";
 
 const consumers = [];
 
@@ -7,46 +10,50 @@ export const addConsumer = ({
   roomName,
   socketId,
 }) => {
-  consumers.push({
+  const consumerData = {
     consumer,
     roomName,
     socketId,
-  });
+  };
 
-  addConsumerToPeer(
-    socketId,
-    consumer.id
-  );
+  consumers.push(consumerData);
+  addConsumerToPeer(socketId, consumer.id);
+
+  return consumerData;
 };
 
 export const getConsumer = (consumerId) => {
-  return consumers.find((c) =>
-      c.consumer.id === consumerId
+  return consumers.find(
+    (item) => item.consumer.id === consumerId,
   );
 };
 
-export const removeConsumer = (consumerId) => {
-  const filtered = consumers.filter((c) =>
-        c.consumer.id !== consumerId
-    );
+export const removeConsumer = (
+  consumerId,
+  closeConsumer = true,
+) => {
+  const index = consumers.findIndex(
+    (item) => item.consumer.id === consumerId,
+  );
 
-  consumers.length = 0;
-  consumers.push(...filtered);
+  if (index === -1) return;
+
+  const [item] = consumers.splice(index, 1);
+  removeConsumerFromPeer(item.socketId, consumerId);
+
+  if (closeConsumer && !item.consumer.closed) {
+    item.consumer.close();
+  }
 };
 
 export const removeConsumers = (socketId) => {
-  consumers.forEach((item) => {
-    if (item.socketId === socketId) {
-      item.consumer.close();
-    }
-  });
+  const peerConsumers = consumers.filter(
+    (item) => item.socketId === socketId,
+  );
 
-  const filtered =consumers.filter((item) =>
-        item.socketId !== socketId
-    );
-
-  consumers.length = 0;
-  consumers.push(...filtered);
+  for (const item of peerConsumers) {
+    removeConsumer(item.consumer.id, true);
+  }
 };
 
-export const getConsumers = () =>consumers;
+export const getConsumers = () => consumers;

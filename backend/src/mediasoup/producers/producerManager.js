@@ -1,4 +1,7 @@
-import {addProducerToPeer,} from "../peers/peerManager.js";
+import {
+  addProducerToPeer,
+  removeProducerFromPeer,
+} from "../peers/peerManager.js";
 
 const producers = [];
 
@@ -7,47 +10,62 @@ export const addProducer = ({
   roomName,
   socketId,
 }) => {
-  producers.push({
+  const producerData = {
     producer,
     roomName,
     socketId,
+  };
+
+  producers.push(producerData);
+  addProducerToPeer(socketId, producer.id);
+
+  producer.on("transportclose", () => {
+    removeProducer(producer.id, false);
   });
 
-  addProducerToPeer(
-    socketId,
-    producer.id
-  );
+  producer.on("close", () => {
+    removeProducer(producer.id, false);
+  });
+
+  return producerData;
 };
 
-export const getProducersByRoom = (
-  roomName,
-  socketId
-) => {
-  return producers.filter(
-      (p) =>
-        p.roomName === roomName &&
-        p.socketId !== socketId
-    ).map((p) => ({
-      producerId: p.producer.id,
-      peerId: p.socketId,
+export const getProducersByRoom = (roomName, socketId) => {
+  return producers
+    .filter(
+      (producerData) =>
+        producerData.roomName === roomName &&
+        producerData.socketId !== socketId,
+    )
+    .map((producerData) => ({
+      producerId: producerData.producer.id,
+      peerId: producerData.socketId,
     }));
 };
 
-export const removeProducers = (socketId) => {
-  producers.forEach((item) => {
-    if (item.socketId === socketId) {
-      item.producer.close();
-    }
-  });
+export const removeProducer = (producerId, closeProducer = true) => {
+  const index = producers.findIndex(
+    (item) => item.producer.id === producerId,
+  );
 
-  const filtered = producers.filter(
-      (item) =>
-        item.socketId !== socketId
-    );
+  if (index === -1) return;
 
-  producers.length = 0;
-  producers.push(...filtered);
+  const [item] = producers.splice(index, 1);
+  removeProducerFromPeer(item.socketId, producerId);
+
+  if (closeProducer && !item.producer.closed) {
+    item.producer.close();
+  }
 };
 
-export const getProducers = () =>
-  producers;
+export const removeProducers = (socketId) => {
+  const peerProducers = producers.filter(
+    (item) => item.socketId === socketId,
+  );
+
+  for (const item of peerProducers) {
+    removeProducer(item.producer.id, true);
+  }
+};
+
+export const getProducers = () => producers;

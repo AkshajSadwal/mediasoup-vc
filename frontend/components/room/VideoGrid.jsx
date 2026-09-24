@@ -63,8 +63,9 @@ xl:grid-cols-3
   remoteStreams.map((item,index)=>(
 
     <RemoteVideo
-      key={item.producerId}
+      key={item.peerId}
       stream={item.stream}
+      trackSignature={item.trackSignature}
       name={`Remote User ${index + 1}`}
       audioEnabled={item.audioEnabled}
       videoEnabled={item.videoEnabled}

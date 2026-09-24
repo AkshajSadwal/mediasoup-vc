@@ -1,47 +1,46 @@
 import Room from "./room.js";
-import {getWorker,getMediaCodecs,} from "../workers/workerManager.js";
+import {
+  getWorker,
+  getMediaCodecs,
+} from "../workers/workerManager.js";
 
 const rooms = {};
 
-export const createRoom = async (
-  roomName,
-  socketId
-) => {
-  let router;
-  const room = rooms[roomName];
+export const createRoom = async (roomName, socketId) => {
+  const existingRoom = rooms[roomName];
 
-  if (room) {
-    router = room.router;
-    room.peers.push(socketId);
-  } else {
-    router = await getWorker().createRouter({
-      mediaCodecs: getMediaCodecs(),
-    });
+  if (existingRoom) {
+    if (!existingRoom.peers.includes(socketId)) {
+      existingRoom.peers.push(socketId);
+    }
 
-    rooms[roomName] = new Room(
-      roomName,
-      router,
-      socketId
-    );
+    return existingRoom.router;
   }
+
+  const router = await getWorker().createRouter({
+    mediaCodecs: getMediaCodecs(),
+  });
+
+  rooms[roomName] = new Room(
+    roomName,
+    router,
+    socketId,
+  );
+
   return router;
 };
 
-export const getRoom = (roomName) =>rooms[roomName];
+export const getRoom = (roomName) => rooms[roomName];
 export const getRooms = () => rooms;
 
-export const removePeerFromRoom = (
-  roomName,
-  socketId
-) => {
-  if (!rooms[roomName]) return;
-  rooms[roomName].peers =
-    rooms[roomName].peers.filter(
-      (id) => id !== socketId
-    );
-  if (
-    rooms[roomName].peers.length === 0
-  ) {
+export const removePeerFromRoom = (roomName, socketId) => {
+  const room = rooms[roomName];
+  if (!room) return;
+
+  room.peers = room.peers.filter((id) => id !== socketId);
+
+  if (room.peers.length === 0) {
+    room.router.close();
     delete rooms[roomName];
   }
 };
