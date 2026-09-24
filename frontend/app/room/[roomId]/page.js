@@ -30,15 +30,65 @@ export default function Home() {
       .map((track) => `${track.kind}:${track.id}:${track.readyState}`)
       .sort()
       .join("|");
+
+  const upsertParticipant = (participant) => {
+    if (!participant?.peerId) return;
+
+    participantStatesRef.current[participant.peerId] = {
+      audioEnabled: participant.audioEnabled ?? true,
+      videoEnabled: participant.videoEnabled ?? true,
+      connected: participant.connected ?? true,
+    };
+
+    setParticipants((prev) => {
+      const existing = prev.find((item) => item.peerId === participant.peerId);
+
+      if (existing) {
+        return prev.map((item) =>
+          item.peerId === participant.peerId
+            ? { ...item, ...participant }
+            : item,
+        );
+      }
+
+      return [...prev, {
+        peerId: participant.peerId,
+        audioEnabled: participant.audioEnabled ?? true,
+        videoEnabled: participant.videoEnabled ?? true,
+        connected: participant.connected ?? true,
+      }];
+    });
+  };
+
+  const removeParticipant = (peerId) => {
+    delete participantStatesRef.current[peerId];
+
+    setParticipants((prev) =>
+      prev.filter((item) => item.peerId !== peerId),
+    );
+  };
+
+  const getCurrentSession = () => ({
+    generation: connectionGenerationRef.current,
+    socketId: socketRef.current?.id,
+  });
+
+  const isCurrentSession = (generation, socketId) =>
+    mountedRef.current &&
+    connectionGenerationRef.current === generation &&
+    socketRef.current?.id === socketId;
   const consumerSetupRef = useRef(new Set());
   const pendingProducerSignalsRef = useRef(new Map());
   const closedProducerIdsRef = useRef(new Set());
   const mountedRef = useRef(false);
+  const connectionGenerationRef = useRef(0);
+  const joinInProgressRef = useRef(false);
 
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [message, setMessage] = useState("");
   const [remoteStreams, setRemoteStreams] = useState([]);
+  const [participants, setParticipants] = useState([]);
 
   const paramsRef = useRef({
     encodings: [
@@ -135,12 +185,20 @@ export default function Home() {
     }
   };
 
-  const createProducerTransport = () => {
+  const createProducerTransport = (generation, socketId) => {
     return new Promise((resolve, reject) => {
+      if (!isCurrentSession(generation, socketId)) {
+        return reject(new Error("Connection changed while creating transport."));
+      }
+
       socketRef.current.emit(
         "createWebRtcTransport",
         { sender: true },
         ({ params }) => {
+          if (!isCurrentSession(generation, socketId)) {
+            return reject(new Error("Connection changed while creating transport."));
+          }
+
           if (params?.error) {
             return reject(new Error(params.error));
           }
@@ -240,12 +298,20 @@ export default function Home() {
     }
   };
 
-  const createConsumerTransport = () => {
+  const createConsumerTransport = (generation, socketId) => {
     return new Promise((resolve, reject) => {
+      if (!isCurrentSession(generation, socketId)) {
+        return reject(new Error("Connection changed while creating transport."));
+      }
+
       socketRef.current.emit(
         "createWebRtcTransport",
         { sender: false },
         ({ params }) => {
+          if (!isCurrentSession(generation, socketId)) {
+            return reject(new Error("Connection changed while creating transport."));
+          }
+
           if (params?.error) {
             return reject(new Error(params.error));
           }
@@ -423,9 +489,15 @@ export default function Home() {
     peerId,
     transport,
     transportId,
+    generation,
+    socketId,
   ) => {
     try {
       await new Promise((resolve, reject) => {
+        if (!isCurrentSession(generation, socketId)) {
+          return reject(new Error("Connection changed while consuming media."));
+        }
+
         socketRef.current.emit(
           "consume",
           {
@@ -434,6 +506,10 @@ export default function Home() {
             serverConsumerTransportId: transportId,
           },
           async ({ params }) => {
+            if (!isCurrentSession(generation, socketId)) {
+              return reject(new Error("Connection changed while consuming media."));
+            }
+
             if (params?.error) {
               return reject(new Error(params.error));
             }
@@ -506,6 +582,12 @@ export default function Home() {
                 consumer,
               );
 
+              if (!isCurrentSession(generation, socketId)) {
+                consumer.close();
+                consumersRef.current.delete(producerId);
+                return resolve();
+              }
+
               socketRef.current.emit("consumer-resume", {
                 serverConsumerId: params.serverConsumerId,
               });
@@ -557,11 +639,15 @@ export default function Home() {
 
     consumerSetupRef.current.add(producerId);
 
+    const { generation, socketId } = getCurrentSession();
+
     consume(
       producerId,
       peerId,
       consumerTransportRef.current,
       consumerTransportRef.current.id,
+      generation,
+      socketId,
     );
   };
 
@@ -589,14 +675,25 @@ export default function Home() {
     });
   };
 
-  const getLocalStream = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: {
-        width: 1280,
-        height: 720,
-      },
-    });
+  const getLocalStream = async (generation, socketId) => {
+    let stream = localStreamRef.current;
+
+    if (!stream) {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          width: 1280,
+          height: 720,
+        },
+      });
+    }
+
+    if (!isCurrentSession(generation, socketId)) {
+      if (stream !== localStreamRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      return;
+    }
 
     if (!mountedRef.current) {
       stream.getTracks().forEach((track) => track.stop());
@@ -615,11 +712,11 @@ export default function Home() {
       audioTrack: stream.getAudioTracks()[0],
     };
 
-    await createProducerTransport();
+    await createProducerTransport(generation, socketId);
     await produce();
   };
 
-  const cleanupMedia = () => {
+  const cleanupMedia = ({ stopLocalTracks = true } = {}) => {
     consumersRef.current.forEach(({ consumer }) => {
       try {
         consumer.close();
@@ -645,23 +742,29 @@ export default function Home() {
     }
     consumerTransportRef.current = null;
 
-    if (localStreamRef.current) {
+    if (stopLocalTracks && localStreamRef.current) {
       localStreamRef.current
         .getTracks()
         .forEach((track) => track.stop());
+      localStreamRef.current = null;
+      paramsRef.current.videoTrack = null;
+      paramsRef.current.audioTrack = null;
     }
-
-    localStreamRef.current = null;
-    paramsRef.current.videoTrack = null;
-    paramsRef.current.audioTrack = null;
   };
 
   const joinRoom = () => {
+    if (!socketRef.current || joinInProgressRef.current) return;
+
+    const { generation, socketId } = getCurrentSession();
+    joinInProgressRef.current = true;
+
     socketRef.current.emit(
       "joinRoom",
       { roomName },
       async (response) => {
         try {
+          if (!isCurrentSession(generation, socketId)) return;
+
           if (response?.error) {
             throw new Error(response.error);
           }
@@ -670,23 +773,60 @@ export default function Home() {
             throw new Error("Room did not return RTP capabilities.");
           }
 
+          setParticipants(
+            Array.isArray(response.participants)
+              ? response.participants
+              : [],
+          );
+
+          participantStatesRef.current = {};
+          for (const participant of response.participants || []) {
+            participantStatesRef.current[participant.peerId] = {
+              audioEnabled: participant.audioEnabled ?? true,
+              videoEnabled: participant.videoEnabled ?? true,
+              connected: true,
+            };
+          }
+
           const device = new mediasoupClient.Device();
           await device.load({
             routerRtpCapabilities: response.rtpCapabilities,
           });
+
+          if (!isCurrentSession(generation, socketId)) return;
           deviceRef.current = device;
 
-          if (!mountedRef.current) return;
+          await createConsumerTransport(generation, socketId);
+          if (!isCurrentSession(generation, socketId)) return;
 
-          await createConsumerTransport();
           flushPendingProducerSignals();
-          await getLocalStream();
+          await getLocalStream(generation, socketId);
+          if (!isCurrentSession(generation, socketId)) return;
+
           requestExistingProducers();
           flushPendingProducerSignals();
 
+          // Re-announce the local media state because a reconnect creates a
+          // brand-new server-side peer.
+          if (socketRef.current?.connected) {
+            socketRef.current.emit("audio-state", {
+              enabled: paramsRef.current.audioTrack?.enabled ?? true,
+            });
+            socketRef.current.emit("video-state", {
+              enabled: paramsRef.current.videoTrack?.enabled ?? true,
+            });
+          }
         } catch (error) {
+          if (!isCurrentSession(generation, socketId)) return;
           console.error("JOIN ROOM FAILED", error);
           showMessage(error.message || "Could not join room");
+          cleanupMedia({ stopLocalTracks: false });
+          deviceRef.current = null;
+          setParticipants([]);
+        } finally {
+          if (connectionGenerationRef.current === generation) {
+            joinInProgressRef.current = false;
+          }
         }
       },
     );
@@ -698,13 +838,36 @@ export default function Home() {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
     const socket = io(`${socketUrl}/mediasoup`, {
       path: "/socket.io",
+      reconnection: true,
     });
 
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      connectionGenerationRef.current += 1;
+      joinInProgressRef.current = false;
+
       console.log("connected", socket.id);
       joinRoom();
+    });
+
+    socket.on("disconnect", (reason) => {
+      if (!mountedRef.current) return;
+
+      console.warn("SOCKET DISCONNECTED", reason);
+      connectionGenerationRef.current += 1;
+      joinInProgressRef.current = false;
+      deviceRef.current = null;
+      pendingProducerSignalsRef.current.clear();
+      closedProducerIdsRef.current.clear();
+
+      // Keep camera/microphone permission and tracks alive so a reconnect can
+      // reuse them without asking the user again. Recreate mediasoup transports
+      // when Socket.IO connects again.
+      cleanupMedia({ stopLocalTracks: false });
+      setRemoteStreams([]);
+      setParticipants([]);
+      setMessage("Connection lost. Reconnecting...");
     });
 
     socket.on("connect_error", (error) => {
@@ -720,73 +883,88 @@ export default function Home() {
       removeRemoteProducer(remoteProducerId);
     });
 
+    socket.on("participant-joined", (participant) => {
+      upsertParticipant(participant);
+    });
+
+    socket.on("participant-left", ({ peerId }) => {
+      removeParticipant(peerId);
+
+      // Mark both active and pending media from this peer as closed. An
+      // in-flight consume will then discard its consumer when it resolves.
+      for (const [producerId, pendingPeerId] of pendingProducerSignalsRef.current) {
+        if (pendingPeerId === peerId) {
+          closedProducerIdsRef.current.add(producerId);
+          pendingProducerSignalsRef.current.delete(producerId);
+        }
+      }
+
+      for (const [producerId, data] of consumersRef.current.entries()) {
+        if (data.peerId === peerId) {
+          closedProducerIdsRef.current.add(producerId);
+          removeRemoteProducer(producerId);
+        }
+      }
+    });
+
+    socket.on("participant-state", (participant) => {
+      upsertParticipant(participant);
+
+      setRemoteStreams((prev) =>
+        prev.map((item) =>
+          item.peerId === participant.peerId
+            ? {
+                ...item,
+                audioEnabled: participant.audioEnabled,
+                videoEnabled: participant.videoEnabled,
+              }
+            : item,
+        ),
+      );
+    });
+
     socket.on("audio-state", ({ peerId, enabled }) => {
-      participantStatesRef.current[peerId] = {
-        ...(participantStatesRef.current[peerId] || {}),
+      upsertParticipant({
+        peerId,
         audioEnabled: enabled,
-      };
+      });
 
       setRemoteStreams((prev) =>
         prev.map((item) =>
           item.peerId === peerId
-            ? {
-                ...item,
-                audioEnabled: enabled,
-              }
+            ? { ...item, audioEnabled: enabled }
             : item,
         ),
       );
     });
 
     socket.on("video-state", ({ peerId, enabled }) => {
-      participantStatesRef.current[peerId] = {
-        ...(participantStatesRef.current[peerId] || {}),
+      upsertParticipant({
+        peerId,
         videoEnabled: enabled,
-      };
+      });
 
       setRemoteStreams((prev) =>
         prev.map((item) =>
           item.peerId === peerId
-            ? {
-                ...item,
-                videoEnabled: enabled,
-              }
+            ? { ...item, videoEnabled: enabled }
             : item,
         ),
       );
     });
 
-    socket.on(
-      "participant-state",
-      ({ peerId, audioEnabled, videoEnabled }) => {
-        participantStatesRef.current[peerId] = {
-          audioEnabled,
-          videoEnabled,
-        };
-
-        setRemoteStreams((prev) =>
-          prev.map((item) =>
-            item.peerId === peerId
-              ? {
-                  ...item,
-                  audioEnabled,
-                  videoEnabled,
-                }
-              : item,
-          ),
-        );
-      },
-    );
-
     return () => {
       mountedRef.current = false;
+      connectionGenerationRef.current += 1;
+      joinInProgressRef.current = false;
       socket.disconnect();
-      cleanupMedia();
+      cleanupMedia({ stopLocalTracks: true });
 
       participantStatesRef.current = {};
       pendingProducerSignalsRef.current.clear();
       closedProducerIdsRef.current.clear();
       setRemoteStreams([]);
+      setParticipants([]);
     };
   }, [roomName]);
 
@@ -804,7 +982,7 @@ export default function Home() {
     >
       <RoomHeader
         roomName={roomName}
-        participantCount={remoteStreams.length + 1}
+        participantCount={participants.length + 1}
       />
 
       <VideoGrid

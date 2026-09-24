@@ -3,6 +3,10 @@ import Peer from "./Peer.js";
 const peers = {};
 
 export const createPeer = (socket, roomName) => {
+  if (peers[socket.id]) {
+    return peers[socket.id];
+  }
+
   peers[socket.id] = new Peer(socket, roomName);
   return peers[socket.id];
 };

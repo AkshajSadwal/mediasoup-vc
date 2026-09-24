@@ -69,3 +69,10 @@ export const removeProducers = (socketId) => {
 };
 
 export const getProducers = () => producers;
+export const closeAllProducers = () => {
+  while (producers.length > 0) {
+    const item = producers[0];
+    removeProducer(item.producer.id, true);
+  }
+};
+

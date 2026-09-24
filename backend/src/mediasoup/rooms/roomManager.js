@@ -5,6 +5,7 @@ import {
 } from "../workers/workerManager.js";
 
 const rooms = {};
+const roomCreationPromises = new Map();
 
 export const createRoom = async (roomName, socketId) => {
   const existingRoom = rooms[roomName];
@@ -17,17 +18,41 @@ export const createRoom = async (roomName, socketId) => {
     return existingRoom.router;
   }
 
-  const router = await getWorker().createRouter({
-    mediaCodecs: getMediaCodecs(),
-  });
+  // Only one router may be created for a brand-new room at a time.
+  let creationPromise = roomCreationPromises.get(roomName);
 
-  rooms[roomName] = new Room(
-    roomName,
-    router,
-    socketId,
-  );
+  if (!creationPromise) {
+    creationPromise = (async () => {
+      const router = await getWorker().createRouter({
+        mediaCodecs: getMediaCodecs(),
+      });
 
-  return router;
+      const room = new Room(
+        roomName,
+        router,
+        socketId,
+      );
+
+      rooms[roomName] = room;
+      return room;
+    })();
+
+    roomCreationPromises.set(roomName, creationPromise);
+  }
+
+  try {
+    const room = await creationPromise;
+
+    if (!room.peers.includes(socketId)) {
+      room.peers.push(socketId);
+    }
+
+    return room.router;
+  } finally {
+    if (roomCreationPromises.get(roomName) === creationPromise) {
+      roomCreationPromises.delete(roomName);
+    }
+  }
 };
 
 export const getRoom = (roomName) => rooms[roomName];
@@ -43,4 +68,22 @@ export const removePeerFromRoom = (roomName, socketId) => {
     room.router.close();
     delete rooms[roomName];
   }
+};
+
+export const closeAllRooms = () => {
+  for (const roomName of Object.keys(rooms)) {
+    const room = rooms[roomName];
+
+    try {
+      if (!room.router.closed) {
+        room.router.close();
+      }
+    } catch (error) {
+      console.error("ROOM ROUTER CLOSE FAILED", roomName, error);
+    }
+
+    delete rooms[roomName];
+  }
+
+  roomCreationPromises.clear();
 };

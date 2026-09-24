@@ -57,3 +57,10 @@ export const removeConsumers = (socketId) => {
 };
 
 export const getConsumers = () => consumers;
+export const closeAllConsumers = () => {
+  while (consumers.length > 0) {
+    const item = consumers[0];
+    removeConsumer(item.consumer.id, true);
+  }
+};
+

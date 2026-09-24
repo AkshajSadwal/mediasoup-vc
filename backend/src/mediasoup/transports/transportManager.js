@@ -78,3 +78,19 @@ export const removeTransports = (socketId) => {
 };
 
 export const getTransports = () => transports;
+
+export const closeAllTransports = () => {
+  while (transports.length > 0) {
+    const item = transports[0];
+
+    try {
+      if (!item.transport.closed) {
+        item.transport.close();
+      }
+    } catch (error) {
+      console.error("TRANSPORT CLOSE FAILED", item.transport.id, error);
+    }
+
+    removeTransportRecord(item.transport.id);
+  }
+};

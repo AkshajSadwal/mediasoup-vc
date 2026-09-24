@@ -86,6 +86,14 @@ const registerSocketHandlers = (socket) => {
     console.log("peer disconnected", socket.id);
 
     const peer = getPeer(socket.id);
+    const roomName = peer?.roomName || socket.roomName;
+
+    if (roomName) {
+      socket.to(roomName).emit("participant-left", {
+        peerId: socket.id,
+      });
+      removePeerFromRoom(roomName, socket.id);
+    }
 
     // Close mediasoup resources before removing the peer record.
     removeConsumers(socket.id);
@@ -93,7 +101,6 @@ const registerSocketHandlers = (socket) => {
     removeTransports(socket.id);
 
     if (peer) {
-      removePeerFromRoom(peer.roomName, socket.id);
       deletePeer(socket.id);
     }
   });

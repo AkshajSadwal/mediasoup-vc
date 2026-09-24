@@ -7,6 +7,13 @@ import {
   getTransportById,
 } from "../../mediasoup/transports/transportManager.js";
 
+const toTransportParams = (transport) => ({
+  id: transport.id,
+  iceParameters: transport.iceParameters,
+  iceCandidates: transport.iceCandidates,
+  dtlsParameters: transport.dtlsParameters,
+});
+
 export const createTransportHandler = async (
   socket,
   { sender },
@@ -20,7 +27,7 @@ export const createTransportHandler = async (
       });
     }
 
-    // Keep one send transport and one receive transport per peer.
+    const transportType = sender ? "send" : "recv";
     const existingTransport = getTransport(
       socket.id,
       !sender,
@@ -28,12 +35,16 @@ export const createTransportHandler = async (
 
     if (existingTransport && !existingTransport.closed) {
       return callback({
-        params: {
-          id: existingTransport.id,
-          iceParameters: existingTransport.iceParameters,
-          iceCandidates: existingTransport.iceCandidates,
-          dtlsParameters: existingTransport.dtlsParameters,
-        },
+        params: toTransportParams(existingTransport),
+      });
+    }
+
+    // If another request is already creating this direction's transport,
+    // wait for it instead of creating a duplicate.
+    if (peer.transportPromises[transportType]) {
+      const transport = await peer.transportPromises[transportType];
+      return callback({
+        params: toTransportParams(transport),
       });
     }
 
@@ -44,25 +55,33 @@ export const createTransportHandler = async (
       });
     }
 
-    const transport = await createWebRtcTransport(
-      room.router,
-    );
+    const creationPromise = (async () => {
+      const transport = await createWebRtcTransport(
+        room.router,
+      );
 
-    addTransport({
-      transport,
-      roomName: peer.roomName,
-      socketId: socket.id,
-      consumer: !sender,
-    });
+      addTransport({
+        transport,
+        roomName: peer.roomName,
+        socketId: socket.id,
+        consumer: !sender,
+      });
 
-    callback({
-      params: {
-        id: transport.id,
-        iceParameters: transport.iceParameters,
-        iceCandidates: transport.iceCandidates,
-        dtlsParameters: transport.dtlsParameters,
-      },
-    });
+      return transport;
+    })();
+
+    peer.transportPromises[transportType] = creationPromise;
+
+    try {
+      const transport = await creationPromise;
+      callback({
+        params: toTransportParams(transport),
+      });
+    } finally {
+      if (peer.transportPromises[transportType] === creationPromise) {
+        peer.transportPromises[transportType] = null;
+      }
+    }
   } catch (error) {
     console.error("TRANSPORT CREATE FAILED", error);
 

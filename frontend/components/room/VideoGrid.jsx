@@ -52,7 +52,7 @@ Waiting for participants...
 <div
 className="
 grid
-h-full
+fullh-
 gap-6
 md:grid-cols-2
 xl:grid-cols-3
