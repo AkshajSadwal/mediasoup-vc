@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { CalendarClock, Clock, Play, Video } from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, Play, Video } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
 
@@ -71,7 +71,8 @@ export default function WaitingRoomPage() {
   if (sessionStatus === "loading" || !meeting) return <main className="min-h-screen bg-[#030712] text-white grid place-items-center">{error ? error : "Loading waiting room..."}</main>;
 
   return (
-    <main className="min-h-screen bg-[#030712] text-white flex items-center justify-center p-6">
+    <main className="relative min-h-screen bg-[#030712] text-white flex items-center justify-center p-6">
+      <button type="button" onClick={() => router.push("/")} className="absolute left-6 top-6 inline-flex items-center gap-2 rounded-[12px] border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white"><ArrowLeft className="h-4 w-4" /> Back</button>
       <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-white/10 backdrop-blur-2xl p-8 text-center shadow-2xl">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-cyan-400/10"><Clock className="h-10 w-10 text-cyan-300" /></div>
         <p className="mt-6 text-sm uppercase tracking-[0.2em] text-cyan-300">Waiting room</p>

@@ -1,19 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  Crown,
-  MessageCircle,
-  Mic,
-  MicOff,
-  Send,
-  Users,
-  Video,
-  VideoOff,
-  Volume2,
-  UserX,
-  X,
-} from "lucide-react";
+import { Crown, MessageCircle, MicOff, Send, Users, Volume2, UserX, X } from "lucide-react";
 
 export default function MeetingPanel({
   open,
@@ -27,9 +15,6 @@ export default function MeetingPanel({
   participants,
   localPeerId,
   localName,
-  localAudioEnabled,
-  localVideoEnabled,
-  localAdminMuted,
   isAdmin,
   onAdminMute,
   onAdminRemove,
@@ -84,18 +69,7 @@ export default function MeetingPanel({
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="space-y-2">
-            <ParticipantRow
-              participant={{
-                peerId: localPeerId,
-                name: localName,
-                isAdmin,
-                audioEnabled: localAudioEnabled,
-                videoEnabled: localVideoEnabled,
-                adminMuted: localAdminMuted,
-              }}
-              local={true}
-              admin={false}
-            />
+            <ParticipantRow participant={{ peerId: localPeerId, name: localName, isAdmin }} local={true} admin={false} />
             {participants.map((participant) => (
               <ParticipantRow
                 key={participant.peerId}
@@ -116,9 +90,6 @@ export default function MeetingPanel({
 
 function ParticipantRow({ participant, local, admin, busy, onMute, onRemove }) {
   const displayName = local ? participant.name || "You" : participant.name || participant.username || "Participant";
-  const audioOn = Boolean(participant.audioEnabled);
-  const videoOn = Boolean(participant.videoEnabled);
-
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-sm font-semibold">{displayName.charAt(0).toUpperCase()}</div>
@@ -127,16 +98,7 @@ function ParticipantRow({ participant, local, admin, busy, onMute, onRemove }) {
           <span className="truncate text-sm font-medium">{displayName}{local ? " (You)" : ""}</span>
           {participant.isAdmin && <Crown size={14} className="text-cyan-300" />}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 ${audioOn ? "bg-emerald-400/10 text-emerald-300" : "bg-white/10 text-white/50"}`}>
-            {audioOn ? <Mic size={12} /> : <MicOff size={12} />}
-            {participant.adminMuted ? "Mic muted by admin" : audioOn ? "Mic on" : "Mic off"}
-          </span>
-          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 ${videoOn ? "bg-cyan-400/10 text-cyan-300" : "bg-white/10 text-white/50"}`}>
-            {videoOn ? <Video size={12} /> : <VideoOff size={12} />}
-            {videoOn ? "Camera on" : "Camera off"}
-          </span>
-        </div>
+        <div className="text-xs text-white/40">{participant.adminMuted ? "Muted by admin" : participant.audioEnabled ? "Mic on" : "Mic off"}</div>
       </div>
       {!local && admin && !participant.isAdmin && (
         <div className="flex items-center gap-1">
@@ -147,3 +109,4 @@ function ParticipantRow({ participant, local, admin, busy, onMute, onRemove }) {
     </div>
   );
 }
+

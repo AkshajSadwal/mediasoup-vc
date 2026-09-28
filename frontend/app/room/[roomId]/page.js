@@ -38,13 +38,6 @@ export default function Home() {
   const upsertParticipant = (participant) => {
     if (!participant?.peerId) return;
 
-    // The local participant is rendered separately from the remote list.
-    // Ignore self state broadcasts so moderation/status updates never add
-    // the current user as an extra participant.
-    if (socketRef.current?.id && participant.peerId === socketRef.current.id) {
-      return;
-    }
-
     participantStatesRef.current[participant.peerId] = {
       audioEnabled: participant.audioEnabled ?? true,
       videoEnabled: participant.videoEnabled ?? true,
@@ -194,10 +187,6 @@ export default function Home() {
 
     videoTrack.enabled = !videoTrack.enabled;
     setVideoEnabled(videoTrack.enabled);
-    setLocalParticipantInfo((prev) => ({
-      ...(prev || {}),
-      videoEnabled: videoTrack.enabled,
-    }));
 
     socketRef.current.emit("video-state", {
       enabled: videoTrack.enabled,
@@ -208,22 +197,16 @@ export default function Home() {
     const audioTrack = paramsRef.current.audioTrack;
     if (!audioTrack || !socketRef.current) return;
 
-    const nextEnabled = !audioTrack.enabled;
-    if (adminMuted && nextEnabled) {
+    if (adminMuted && !audioTrack.enabled) {
       showMessage("The admin has muted your microphone.");
       return;
     }
 
-    audioTrack.enabled = nextEnabled;
-    setAudioEnabled(nextEnabled);
-    setLocalParticipantInfo((prev) => ({
-      ...(prev || {}),
-      audioEnabled: nextEnabled,
-      adminMuted,
-    }));
+    audioTrack.enabled = !audioTrack.enabled;
+    setAudioEnabled(audioTrack.enabled);
 
     socketRef.current.emit("audio-state", {
-      enabled: nextEnabled,
+      enabled: audioTrack.enabled,
     });
   };
 
@@ -758,7 +741,7 @@ export default function Home() {
     });
   };
 
-  const getLocalStream = async (generation, socketId, forcedAdminMuted = false) => {
+  const getLocalStream = async (generation, socketId) => {
     let stream = localStreamRef.current;
 
     if (!stream) {
@@ -789,29 +772,11 @@ export default function Home() {
       localVideoRef.current.srcObject = stream;
     }
 
-    const videoTrack = stream.getVideoTracks()[0];
-    const audioTrack = stream.getAudioTracks()[0];
-
-    // Preserve the user's current media choices across a reconnect, but let
-    // the server-authoritative admin mute override microphone state.
-    if (audioTrack && forcedAdminMuted) {
-      audioTrack.enabled = false;
-    }
-
     paramsRef.current = {
       ...paramsRef.current,
-      videoTrack,
-      audioTrack,
+      videoTrack: stream.getVideoTracks()[0],
+      audioTrack: stream.getAudioTracks()[0],
     };
-
-    setAudioEnabled(audioTrack ? audioTrack.enabled : false);
-    setVideoEnabled(videoTrack ? videoTrack.enabled : false);
-    setLocalParticipantInfo((prev) => ({
-      ...(prev || {}),
-      audioEnabled: audioTrack ? audioTrack.enabled : false,
-      videoEnabled: videoTrack ? videoTrack.enabled : false,
-      adminMuted: forcedAdminMuted,
-    }));
 
     await createProducerTransport(generation, socketId);
     await produce();
@@ -916,11 +881,7 @@ export default function Home() {
           if (!isCurrentSession(generation, socketId)) return;
 
           flushPendingProducerSignals();
-          await getLocalStream(
-            generation,
-            socketId,
-            Boolean(response.self?.adminMuted),
-          );
+          await getLocalStream(generation, socketId);
           if (!isCurrentSession(generation, socketId)) return;
 
           requestExistingProducers();
@@ -1216,9 +1177,6 @@ export default function Home() {
         participants={participants}
         localPeerId={localPeerId}
         localName={localName}
-        localAudioEnabled={audioEnabled}
-        localVideoEnabled={videoEnabled}
-        localAdminMuted={adminMuted}
         isAdmin={localIsAdmin}
         onAdminMute={adminMuteParticipant}
         onAdminRemove={adminRemoveParticipant}

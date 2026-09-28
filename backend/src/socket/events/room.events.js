@@ -50,14 +50,7 @@ export const joinRoom = async (socket, { roomName }, callback) => {
     const peer = createPeer(socket, normalizedRoomName, socket.user);
     const room = getRoom(normalizedRoomName);
     peer.isAdmin = Boolean(room?.adminUserId && socket.user?.id === room.adminUserId);
-
-    const audioModeration = room?.getAudioModeration?.(peer.userId);
-    peer.forcedAudioMuted = Boolean(audioModeration?.forcedMuted);
-    peer.audioEnabledBeforeAdminMute =
-      audioModeration?.audioEnabledBeforeAdminMute ?? true;
-    peer.audioEnabled = peer.forcedAudioMuted
-      ? false
-      : peer.audioEnabled ?? true;
+    peer.audioEnabled = true;
     peer.videoEnabled = true;
     socket.audioEnabled = true;
     socket.videoEnabled = true;
@@ -82,40 +75,21 @@ export const joinRoom = async (socket, { roomName }, callback) => {
   }
 };
 
-export const audioState = async (socket, { enabled }) => {
-  try {
-    const peer = getPeer(socket.id);
-    if (!peer || !socket.roomName) return;
-
-    const requestedEnabled = Boolean(enabled);
-    const nextEnabled = peer.forcedAudioMuted ? false : requestedEnabled;
-    peer.audioEnabled = nextEnabled;
-    socket.audioEnabled = nextEnabled;
-
-    const { getProducersByPeer } = await import(
-      "../../mediasoup/producers/producerManager.js"
-    );
-
-    for (const item of getProducersByPeer(socket.id, "audio")) {
-      if (item.producer.closed) continue;
-
-      if (nextEnabled) {
-        if (item.producer.paused && !peer.forcedAudioMuted) {
-          await item.producer.resume();
-        }
-      } else if (!item.producer.paused) {
-        await item.producer.pause();
-      }
-    }
-
-    socket.to(socket.roomName).emit("audio-state", {
-      peerId: socket.id,
-      enabled: peer.audioEnabled,
-      mutedByAdmin: peer.forcedAudioMuted,
-    });
-  } catch (error) {
-    console.error("AUDIO STATE FAILED", error);
+export const audioState = (socket, { enabled }) => {
+  const peer = getPeer(socket.id);
+  if (!peer || !socket.roomName) return;
+  if (peer.forcedAudioMuted && enabled) {
+    peer.audioEnabled = false;
+    socket.audioEnabled = false;
+  } else {
+    peer.audioEnabled = Boolean(enabled);
+    socket.audioEnabled = peer.audioEnabled;
   }
+  socket.to(socket.roomName).emit("audio-state", {
+    peerId: socket.id,
+    enabled: peer.audioEnabled,
+    mutedByAdmin: peer.forcedAudioMuted,
+  });
 };
 
 export const videoState = (socket, { enabled }) => {

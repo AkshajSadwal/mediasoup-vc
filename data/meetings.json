@@ -1,0 +1,35 @@
+[
+  {
+    "roomId": "702d9ff5-2326-4a3c-940b-89ff73429276",
+    "hostUserId": "dbcad0ef-f158-456a-acbe-49362f829210",
+    "hostName": "qqqqqqqqqqqqqq",
+    "title": "Rauma Meeting",
+    "scheduledAt": "2026-09-25T12:06:00.000Z",
+    "startedAt": null,
+    "status": "scheduled",
+    "calendarUserIds": [],
+    "createdAt": "2026-09-25T12:01:25.700Z"
+  },
+  {
+    "roomId": "2a80992c-9a6d-4dd8-921e-4668d7d298fb",
+    "hostUserId": "dbcad0ef-f158-456a-acbe-49362f829210",
+    "hostName": "qqqqqqqqqqqqqq",
+    "title": "Rauma Meeting",
+    "scheduledAt": "2026-09-25T13:36:00.000Z",
+    "startedAt": null,
+    "status": "scheduled",
+    "calendarUserIds": [],
+    "createdAt": "2026-09-25T12:34:56.832Z"
+  },
+  {
+    "roomId": "7757708e-0deb-4d01-8aa0-81716bd80bcc",
+    "hostUserId": "dbcad0ef-f158-456a-acbe-49362f829210",
+    "hostName": "qqqqqqqqqqqqqq",
+    "title": "Rauma Meeting",
+    "scheduledAt": "2026-09-25T12:39:00.000Z",
+    "startedAt": null,
+    "status": "scheduled",
+    "calendarUserIds": [],
+    "createdAt": "2026-09-25T12:35:09.199Z"
+  }
+]

@@ -5,14 +5,20 @@ html {
 }
 
 body {
-  background: #030712;
-  color: white;
+  margin: 0;
+  background: #ffffff;
+  color: #111827;
   overflow-x: hidden;
 }
 
-.bg-grid {
-  background-image:
-    linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6, p, span {
+  caret-color: transparent;
 }
