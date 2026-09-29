@@ -926,7 +926,7 @@ export default function Home() {
       }
 
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"}/api/meetings/${roomName}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || ""}/api/meetings/${roomName}`, {
           headers: { Authorization: `Bearer ${session.backendToken}` },
         });
 
@@ -949,7 +949,7 @@ export default function Home() {
       if (cancelled) return;
 
       mountedRef.current = true;
-      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "";
       socket = io(`${socketUrl}/mediasoup`, {
         path: "/socket.io",
         reconnection: true,

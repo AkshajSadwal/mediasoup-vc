@@ -11,7 +11,7 @@ import HeroCopy from "@/components/home/landing/HeroCopy";
 import MeetingHeroVisual from "@/components/home/landing/MeetingHeroVisual";
 import FeatureStrip from "@/components/home/landing/FeatureStrip";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 export default function Home() {
   const router = useRouter();

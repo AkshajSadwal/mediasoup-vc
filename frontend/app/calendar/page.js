@@ -5,7 +5,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Video } from "lucide-r
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
 function formatMonth(date) { return date.toLocaleDateString(undefined, { month: "long", year: "numeric" }); }

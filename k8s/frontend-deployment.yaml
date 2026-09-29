@@ -32,7 +32,7 @@ spec:
               value: "http://backend:4000"
 
             - name: NEXTAUTH_URL
-              value: "http://<MINIKUBE_IP>:30080"
+              value: "http://127.0.0.1:30080"
 
             - name: NEXTAUTH_SECRET
               valueFrom:

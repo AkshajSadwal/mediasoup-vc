@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarPlus, Check, Clock3, Link2, Users, X } from "lucide-react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 export default function AddMeetingModal({ session, onClose, onSaved }) {
   const [roomId, setRoomId] = useState("");

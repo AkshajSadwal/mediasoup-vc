@@ -4,6 +4,9 @@ metadata:
   name: backend
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
+    
   selector:
     matchLabels:
       app: backend
@@ -31,7 +34,7 @@ spec:
               value: "4000"
 
             - name: FRONTEND_URL
-              value: "http://<MINIKUBE_IP>:30080"
+              value: "http://127.0.0.1:30080"
 
             - name: AUTH_SECRET
               valueFrom:

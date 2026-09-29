@@ -16,3 +16,5 @@ frontend/.next/
 Thumbs.db
 
 k8s/secrets.yaml
+
+data
