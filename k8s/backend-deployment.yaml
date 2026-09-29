@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 20
+
+      containers:
+        - name: backend
+          image: mediasoup-backend:latest
+          imagePullPolicy: Never
+
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+
+          env:
+            - name: PORT
+              value: "4000"
+
+            - name: FRONTEND_URL
+              value: "http://<MINIKUBE_IP>:30080"
+
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mediasoup-secrets
+                  key: AUTH_SECRET
+
+            - name: AUTH_BRIDGE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mediasoup-secrets
+                  key: AUTH_BRIDGE_SECRET
+
+            - name: MEDIASOUP_LISTEN_IP
+              value: "0.0.0.0"
+
+            - name: MEDIASOUP_ANNOUNCED_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+
+            - name: MEDIASOUP_RTC_MIN_PORT
+              value: "2000"
+
+            - name: MEDIASOUP_RTC_MAX_PORT
+              value: "2100"
+
+          volumeMounts:
+            - name: backend-data
+              mountPath: /data
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+
+      volumes:
+        - name: backend-data
+          persistentVolumeClaim:
+            claimName: backend-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
