@@ -52,9 +52,7 @@ spec:
               value: "0.0.0.0"
 
             - name: MEDIASOUP_ANNOUNCED_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
+              value: "192.168.1.39"
 
             - name: MEDIASOUP_RTC_MIN_PORT
               value: "2000"
