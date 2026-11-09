@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Video, Globe, LogIn } from "lucide-react";
@@ -10,10 +10,14 @@ import { Video, Globe, LogIn } from "lucide-react";
 export default function LoginPage() {
   const router = useRouter();
   const [callbackUrl, setCallbackUrl] = useState("/");
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   useEffect(() => {
     const value = new URLSearchParams(window.location.search).get("callbackUrl");
     setCallbackUrl(value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/");
+    getProviders()
+      .then((providers) => setGoogleEnabled(Boolean(providers?.google)))
+      .catch(() => setGoogleEnabled(false));
   }, []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -51,9 +55,11 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold">Welcome back</h1>
         <p className="mt-2 text-[#64748b]">Sign in to schedule and host meetings.</p>
 
-        <button onClick={() => signIn("google", { callbackUrl })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
-          <Globe size={20} /> Continue with Google
-        </button>
+        {googleEnabled && (
+          <button type="button" onClick={() => signIn("google", { callbackUrl })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
+            <Globe size={20} /> Continue with Google
+          </button>
+        )}
 
         <div className="my-6 flex items-center gap-3 text-[#94a3b8]"><div className="h-px flex-1 bg-[#e7edf5]" /> OR <div className="h-px flex-1 bg-[#e7edf5]" /></div>
 

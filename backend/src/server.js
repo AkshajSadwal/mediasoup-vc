@@ -16,6 +16,8 @@ import authRoutes from "./http/authRoutes.js";
 import meetingRoutes from "./http/meetingRoutes.js";
 
 const app = express();
+// The application is deployed behind one trusted Nginx reverse proxy.
+app.set("trust proxy", 1);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const profilePicturesDir = path.resolve(__dirname, "../../data/profile-pictures");
 app.use("/profile-pictures", express.static(profilePicturesDir, { fallthrough: false, maxAge: "7d", immutable: true }));
@@ -83,6 +85,7 @@ server.on("error", (error) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const HOST = process.env.HOST || "0.0.0.0";
+server.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
 });

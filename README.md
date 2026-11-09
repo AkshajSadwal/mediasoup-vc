@@ -206,30 +206,33 @@ Keep relational records and binary files separate:
 
 | Data | Recommended service | What to store |
 |---|---|---|
-| Users, meeting metadata, join requests, moderator assignments | Managed PostgreSQL (for example, Neon) | Rows, IDs, roles, timestamps, object keys |
-| Profile images and future uploaded assets | Object storage (OCI Object Storage or Cloudflare R2) | Image objects; store only the object key and metadata in PostgreSQL |
-| Active MediaSoup room/peer state | MediaSoup process (initially one backend/SFU instance) | Ephemeral live state; do not try to store RTP media in PostgreSQL |
+| Users, meeting metadata, join requests, moderator assignments | MongoDB Atlas | Documents, IDs, roles, timestamps, object keys |
+| Profile images and future uploaded assets | Oracle Cloud Object Storage | Image objects; store only the object key and metadata in MongoDB |
+| Active MediaSoup room/peer state | MediaSoup process (initially one backend/SFU instance) | Ephemeral live state; do not try to store RTP media in MongoDB |
 
-The application must be migrated from JSON files to PostgreSQL and from local image writes to an object-storage SDK before this external-storage architecture is in use.
+The application must be migrated from JSON files to MongoDB Atlas and from local image writes to the OCI Object Storage SDK before this external-storage architecture is in use.
 
 ## Oracle Cloud deployment guidance
+
+See [`deploy/oracle/README.md`](deploy/oracle/README.md) for the HTTPS, DNS, Certbot, reverse-proxy, and networking runbook. See [`deploy/oracle/DATA_STORAGE_PLAN.md`](deploy/oracle/DATA_STORAGE_PLAN.md) for the MongoDB Atlas + OCI Object Storage design and migration sequence.
+
 
 For the specified `VM.Standard.E2.1.Micro`:
 
 - The Always Free shape has **1 GB RAM and 1/8 OCPU**, with the ability to use additional CPU resources; public internet bandwidth is limited to **up to 50 Mbps** under the Always Free description.
 - Run only the application processes needed: Nginx, Next.js, Express/Socket.IO, and one MediaSoup worker.
-- Use a managed PostgreSQL service and object storage so database files and profile images do not consume the VM's local disk.
+- Use MongoDB Atlas and OCI Object Storage so database files and profile images do not consume the VM's local disk.
 - Expose web traffic through TCP 80/443 and expose only the configured MediaSoup RTC UDP/TCP range. Do not expose the backend API port directly to the public internet.
 - Configure `MEDIASOUP_ANNOUNCED_IP` to the VM's public IP and validate ICE connectivity from an external network.
 - Use HTTPS, backups, logs, monitoring, secret management, and a restart policy.
 
 This VM is suitable for a constrained demo or low-volume experiment, not a high-concurrency video-conferencing deployment. A MediaSoup SFU forwards media for participants, so network egress and CPU load grow with the number of streams and viewers. Consider OCI's Always Free Ampere A1 allowance (up to 2 OCPUs and 12 GB RAM across eligible instances) if available in your tenancy; validate native dependency/architecture compatibility and test the MediaSoup build before choosing ARM.
 
-Free-tier limits, availability, and terms can change. Check the provider's current limits before relying on a free plan.
+Free-tier limits, availability, and terms can change. The planned MongoDB Atlas Free tier has a small storage allowance and throughput/data-transfer caps; it should be treated as a development/demo database, not assumed to support production workloads. Check current provider limits before relying on a free plan. See [`deploy/oracle/DATA_STORAGE_PLAN.md`](deploy/oracle/DATA_STORAGE_PLAN.md) for the proposed collections, OCI Object Storage model, connectivity, and migration sequence.
 
 ## Security
 
-See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for source-review findings and production hardening recommendations. That document explicitly identifies its scope; it is not a penetration test or production security certification.
+The backend checks authenticated user identity and meeting roles server-side. Before production, review the OAuth bridge secret, JWT/session settings, upload validation, rate limiting, TLS, database permissions, and object-storage access policies. A source-code review is not a penetration test or production security certification.
 
 ## License
 

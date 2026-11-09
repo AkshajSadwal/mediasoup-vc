@@ -20,3 +20,9 @@ k8s/secrets.yaml
 data
 data/users.json
 data/meetings.json
+
+# Production and environment-specific secrets
+**/.env.production
+**/.env.development
+**/.env.test
+**/.env.*.local
