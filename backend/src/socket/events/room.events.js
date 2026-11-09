@@ -1,6 +1,6 @@
 import { createRoom, getRoom, removePeerFromRoom } from "../../mediasoup/rooms/roomManager.js";
 import { createPeer, getPeer } from "../../mediasoup/peers/peerManager.js";
-import { getMeeting, isMeetingOpen } from "../../meetings/meetingStore.js";
+import { getMeeting, isMeetingOpen, canJoinMeeting } from "../../meetings/meetingStore.js";
 
 const normalizeRoomName = (roomName) => {
   if (typeof roomName !== "string") return null;
@@ -16,10 +16,12 @@ export const participantState = (peerId) => {
     userId: peer?.userId || null,
     username: peer?.username || null,
     name: peer?.displayName || `Guest ${peerId.slice(0, 6)}`,
+    avatarUrl: peer?.avatarUrl || null,
     audioEnabled: peer?.audioEnabled ?? true,
     videoEnabled: peer?.videoEnabled ?? true,
     connected: true,
     isAdmin: Boolean(peer?.isAdmin),
+    isModerator: Boolean(peer?.isModerator),
     adminMuted: Boolean(peer?.forcedAudioMuted),
   };
 };
@@ -27,13 +29,15 @@ export const participantState = (peerId) => {
 export const joinRoom = async (socket, { roomName }, callback) => {
   try {
     const normalizedRoomName = normalizeRoomName(roomName);
+    if (typeof callback !== "function") return;
+    if (!socket.user) return callback({ error: "AUTH_REQUIRED" });
     if (!normalizedRoomName) return callback({ error: "Invalid room name." });
 
     const meeting = getMeeting(normalizedRoomName);
     if (meeting) {
-      if (!socket.user) return callback({ error: "AUTH_REQUIRED" });
       if (meeting.status === "cancelled") return callback({ error: "This meeting has been cancelled." });
       if (!isMeetingOpen(meeting)) return callback({ error: "WAITING_ROOM" });
+      if (!canJoinMeeting(meeting, socket.user.id)) return callback({ error: "JOIN_APPROVAL_REQUIRED" });
     }
 
     socket.roomName = normalizedRoomName;
@@ -50,6 +54,7 @@ export const joinRoom = async (socket, { roomName }, callback) => {
     const peer = createPeer(socket, normalizedRoomName, socket.user);
     const room = getRoom(normalizedRoomName);
     peer.isAdmin = Boolean(room?.adminUserId && socket.user?.id === room.adminUserId);
+    peer.isModerator = Boolean(meeting?.moderatorUserIds?.includes(socket.user?.id));
     peer.audioEnabled = true;
     peer.videoEnabled = true;
     socket.audioEnabled = true;

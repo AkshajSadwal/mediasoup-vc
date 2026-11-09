@@ -16,6 +16,10 @@ const ensureStore = () => {
 const normalizeMeeting = (meeting) => ({
   ...meeting,
   attendeeUserIds: Array.isArray(meeting.attendeeUserIds) ? meeting.attendeeUserIds : [],
+  visibility: meeting.visibility === "private" ? "private" : "public",
+  approvedUserIds: Array.isArray(meeting.approvedUserIds) ? meeting.approvedUserIds : [],
+  joinRequests: Array.isArray(meeting.joinRequests) ? meeting.joinRequests : [],
+  moderatorUserIds: Array.isArray(meeting.moderatorUserIds) ? meeting.moderatorUserIds : [],
 });
 
 const readMeetings = () => {
@@ -31,7 +35,7 @@ const writeMeetings = (meetings) => {
   fs.renameSync(tempPath, meetingsPath);
 };
 
-export const createMeeting = ({ hostUserId, hostName, title, scheduledAt }) => {
+export const createMeeting = ({ hostUserId, hostName, title, scheduledAt, visibility = "public" }) => {
   const timestamp = new Date(scheduledAt);
   if (Number.isNaN(timestamp.getTime())) throw new Error("Invalid meeting time.");
   if (timestamp.getTime() <= Date.now() + 30_000) throw new Error("Meeting must be scheduled at least 30 seconds in the future.");
@@ -46,6 +50,10 @@ export const createMeeting = ({ hostUserId, hostName, title, scheduledAt }) => {
     startedAt: null,
     status: "scheduled",
     attendeeUserIds: [],
+    visibility: visibility === "private" ? "private" : "public",
+    approvedUserIds: [],
+    joinRequests: [],
+    moderatorUserIds: [],
     createdAt: new Date().toISOString(),
   };
   meetings.push(meeting);
@@ -107,3 +115,54 @@ export const cancelMeeting = (roomId, userId) => {
 };
 
 export const closeAllMeetingStores = () => {};
+
+
+export const canJoinMeeting = (meeting, userId) => {
+  if (!meeting || !userId) return false;
+  if (meeting.hostUserId === userId) return true;
+  if (meeting.visibility !== "private") return true;
+  return meeting.approvedUserIds.includes(userId) || meeting.moderatorUserIds.includes(userId);
+};
+
+const updateMeeting = (roomId, updater) => {
+  const meetings = readMeetings();
+  const index = meetings.findIndex((item) => item.roomId === roomId);
+  if (index < 0) throw new Error("Meeting not found.");
+  const meeting = normalizeMeeting(meetings[index]);
+  updater(meeting);
+  meetings[index] = meeting;
+  writeMeetings(meetings);
+  return meeting;
+};
+
+export const updateMeetingSettings = (roomId, userId, { visibility }) => updateMeeting(roomId, (meeting) => {
+  if (meeting.hostUserId !== userId) throw new Error("Only the meeting host can change meeting settings.");
+  if (!["public", "private"].includes(visibility)) throw new Error("Invalid meeting visibility.");
+  meeting.visibility = visibility;
+});
+
+export const requestMeetingAccess = (roomId, userId, userName) => updateMeeting(roomId, (meeting) => {
+  if (meeting.status === "cancelled") throw new Error("This meeting has been cancelled.");
+  if (canJoinMeeting(meeting, userId)) return;
+  const existing = meeting.joinRequests.find((request) => request.userId === userId);
+  if (existing && existing.status === "denied") { existing.status = "pending"; existing.requestedAt = new Date().toISOString(); existing.resolvedAt = null; }
+  else if (!existing) meeting.joinRequests.push({ userId, userName: String(userName || "Guest").slice(0, 80), status: "pending", requestedAt: new Date().toISOString() });
+});
+
+export const approveMeetingRequest = (roomId, actorUserId, targetUserId, approved) => updateMeeting(roomId, (meeting) => {
+  if (meeting.hostUserId !== actorUserId && !meeting.moderatorUserIds.includes(actorUserId)) throw new Error("Only the host or a moderator can approve requests.");
+  if (meeting.hostUserId === targetUserId || meeting.moderatorUserIds.includes(targetUserId)) throw new Error("The host and moderators already have access.");
+  const request = meeting.joinRequests.find((item) => item.userId === targetUserId);
+  if (!request || request.status !== "pending") throw new Error("Pending join request not found.");
+  request.status = approved ? "approved" : "denied";
+  request.resolvedAt = new Date().toISOString();
+  if (approved && !meeting.approvedUserIds.includes(targetUserId)) meeting.approvedUserIds.push(targetUserId);
+  if (!approved) meeting.approvedUserIds = meeting.approvedUserIds.filter((id) => id !== targetUserId);
+});
+
+export const setMeetingModerator = (roomId, hostUserId, targetUserId, enabled) => updateMeeting(roomId, (meeting) => {
+  if (meeting.hostUserId !== hostUserId) throw new Error("Only the meeting host can manage moderators.");
+  if (!targetUserId || targetUserId === hostUserId) throw new Error("Invalid moderator.");
+  if (enabled && !meeting.moderatorUserIds.includes(targetUserId)) meeting.moderatorUserIds.push(targetUserId);
+  if (!enabled) meeting.moderatorUserIds = meeting.moderatorUserIds.filter((id) => id !== targetUserId);
+});

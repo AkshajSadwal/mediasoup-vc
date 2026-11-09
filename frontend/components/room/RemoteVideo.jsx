@@ -10,6 +10,7 @@ export default function RemoteVideo({
   audioEnabled = true,
   videoEnabled = true,
   isAdmin = false,
+  avatarUrl = null,
 }) {
   const videoRef = useRef(null);
   const [playBlocked, setPlayBlocked] = useState(false);
@@ -184,11 +185,11 @@ export default function RemoteVideo({
         overflow-hidden
         rounded-3xl
         border
-        border-white/10
-        bg-black
-        shadow-2xl
+        border-[#dce6f2]
+        bg-[#14243a]
+        shadow-[0_18px_45px_rgba(30,55,90,0.14)]
         transition
-        hover:border-white/30
+        hover:border-[#b9cce5]
       "
       onClick={handlePlay}
     >
@@ -212,26 +213,12 @@ export default function RemoteVideo({
             flex-col
             items-center
             justify-center
-            bg-[#111]
+            bg-[#eaf2fc]
           "
         >
-          <div
-            className="
-              flex
-              h-24
-              w-24
-              items-center
-              justify-center
-              rounded-full
-              bg-white/10
-              text-3xl
-              font-bold
-            "
-          >
-            {name.charAt(name.length - 1)}
-          </div>
+          {avatarUrl ? <img src={avatarUrl} alt="" className="h-24 w-24 rounded-full object-cover ring-4 ring-white" /> : <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-3xl font-bold">{name.charAt(0).toUpperCase()}</div>}
 
-          <VideoOff className="mt-4 text-gray-400" />
+          <VideoOff className="mt-4 text-[#64748b]" />
         </div>
       )}
 
@@ -252,7 +239,7 @@ export default function RemoteVideo({
             items-center
             gap-2
             rounded-full
-            bg-black/70
+            bg-white/90
             px-4
             py-3
             text-sm
@@ -293,8 +280,9 @@ export default function RemoteVideo({
             items-center
             gap-2
             rounded-full
-            bg-black/50
+            bg-black/55
             px-4
+            text-white
             py-2
             text-sm
             backdrop-blur-xl
@@ -302,7 +290,7 @@ export default function RemoteVideo({
         >
           {name}
           {isAdmin && (
-            <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+            <span className="rounded-full bg-[#176df3]/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-200">
               Admin
             </span>
           )}
@@ -311,8 +299,9 @@ export default function RemoteVideo({
         <div
           className="
             rounded-full
-            bg-black/50
+            bg-black/55
             p-2
+            text-white
             backdrop-blur-xl
           "
         >

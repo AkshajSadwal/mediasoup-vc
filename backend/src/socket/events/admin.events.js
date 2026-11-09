@@ -5,12 +5,13 @@ const getAuthorizedTarget = (socket, targetPeerId) => {
   const admin = getPeer(socket.id);
   const target = getPeer(targetPeerId);
 
-  if (!admin?.isAdmin) throw new Error("Admin permission required.");
+  if (!admin?.isAdmin && !admin?.isModerator) throw new Error("Moderator permission required.");
   if (!admin.roomName || !target || target.roomName !== admin.roomName) {
     throw new Error("Participant is not in your room.");
   }
   if (target.socket.id === socket.id) throw new Error("You cannot moderate yourself.");
   if (target.isAdmin) throw new Error("The meeting admin cannot be moderated.");
+  if (target.isModerator && !admin.isAdmin) throw new Error("Moderators cannot moderate other moderators.");
 
   return { admin, target };
 };
@@ -25,6 +26,7 @@ const emitParticipantState = (socket, target) => {
     videoEnabled: target.videoEnabled,
     connected: true,
     isAdmin: target.isAdmin,
+    isModerator: target.isModerator,
     adminMuted: target.forcedAudioMuted,
   };
 

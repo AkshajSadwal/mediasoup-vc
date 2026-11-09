@@ -46,8 +46,8 @@ export default function BottomControls({
           gap-4
           rounded-3xl
           border
-          border-white/10
-          bg-white/10
+          border-[#dce6f2]
+          bg-white
           backdrop-blur-xl
           px-6
           py-4
@@ -59,12 +59,13 @@ export default function BottomControls({
 
         <button
           onClick={toggleAudio}
+          aria-label={audioEnabled ? "Mute microphone" : "Unmute microphone"}
           className="
             h-14
             w-14
             rounded-full
-            bg-white/10
-            hover:bg-white/20
+            bg-white
+            hover:bg-[#edf4fd]
             transition
             flex
             items-center
@@ -81,12 +82,13 @@ export default function BottomControls({
 
         <button
           onClick={toggleVideo}
+          aria-label={videoEnabled ? "Turn camera off" : "Turn camera on"}
           className="
             h-14
             w-14
             rounded-full
-            bg-white/10
-            hover:bg-white/20
+            bg-white
+            hover:bg-[#edf4fd]
             transition
             flex
             items-center
@@ -105,12 +107,13 @@ export default function BottomControls({
 
         <button
           onClick={copyRoomCode}
+          aria-label="Copy meeting code"
           className="
             h-14
             w-14
             rounded-full
-            bg-white/10
-            hover:bg-white/20
+            bg-white
+            hover:bg-[#edf4fd]
             transition
             flex
             items-center
@@ -125,12 +128,13 @@ export default function BottomControls({
 
         <button
           onClick={shareRoom}
+          aria-label="Share meeting"
           className="
             h-14
             w-14
             rounded-full
-            bg-white/10
-            hover:bg-white/20
+            bg-white
+            hover:bg-[#edf4fd]
             transition
             flex
             items-center
@@ -144,7 +148,7 @@ export default function BottomControls({
 
         <button
           onClick={() => openPanel?.("chat")}
-          className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center"
+          className="h-14 w-14 rounded-full bg-white hover:bg-[#edf4fd] transition flex items-center justify-center"
           title="Chat"
         >
           <MessageCircle />
@@ -154,7 +158,7 @@ export default function BottomControls({
 
         <button
           onClick={() => openPanel?.("participants")}
-          className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center"
+          className="h-14 w-14 rounded-full bg-white hover:bg-[#edf4fd] transition flex items-center justify-center"
           title="Participants"
         >
           <Users />
@@ -169,6 +173,7 @@ export default function BottomControls({
             w-14
             rounded-full
             bg-red-500
+            text-white
             hover:bg-red-600
             transition
             flex

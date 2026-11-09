@@ -19,6 +19,23 @@ textarea {
   -webkit-tap-highlight-color: transparent;
 }
 
-h1, h2, h3, h4, h5, h6, p, span {
-  caret-color: transparent;
+
+
+/* Caret and I-beam are reserved for focused editable controls. */
+html, body, body * {
+  caret-color: transparent !important;
+  cursor: default;
+}
+
+button, a, [role="button"], summary, label[for] {
+  cursor: pointer;
+}
+
+input, textarea, [contenteditable="true"], [contenteditable=""] {
+  cursor: text;
+}
+
+input:focus, textarea:focus, select:focus,
+[contenteditable="true"]:focus, [contenteditable=""]:focus {
+  caret-color: auto !important;
 }

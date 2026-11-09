@@ -11,6 +11,7 @@ export default function VideoGrid({
   participants = [],
   localName = "You",
   localIsAdmin = false,
+  localAvatarUrl = null,
 }) {
 
 return (
@@ -32,7 +33,7 @@ remoteStreams.length === 0 ? (
 className="
 h-full
 rounded-3xl
-bg-[#111]
+bg-[#eaf2fc]
 shadow-2xl
 flex
 items-center
@@ -42,7 +43,7 @@ justify-center
 
 <p className="
 text-xl
-text-gray-500
+text-[#718096]
 font-medium
 ">
 Waiting for participants...
@@ -71,10 +72,11 @@ xl:grid-cols-3
         key={item.peerId}
         stream={item.stream}
         trackSignature={item.trackSignature}
-        name={participant?.username || participant?.name || `Remote User ${index + 1}`}
+        name={participant?.name || participant?.username || `Remote User ${index + 1}`}
         audioEnabled={item.audioEnabled}
         videoEnabled={item.videoEnabled}
         isAdmin={Boolean(participant?.isAdmin)}
+        avatarUrl={participant?.avatarUrl ? `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}${participant.avatarUrl}` : null}
       />
     );
   })
@@ -95,6 +97,7 @@ xl:grid-cols-3
  videoEnabled={videoEnabled}
  name={localName}
  isAdmin={localIsAdmin}
+ avatarUrl={localAvatarUrl}
 />
 
 

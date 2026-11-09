@@ -38,11 +38,11 @@ export default function ToastMessage({ message }) {
             gap-2
             rounded-full
             border
-            border-white/10
-            bg-white/10
+            border-[#dce6f2]
+            bg-white
             px-5
             py-3
-            text-white
+            text-[#172033]
             backdrop-blur-xl
             shadow-2xl
           "

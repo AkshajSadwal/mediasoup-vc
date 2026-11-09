@@ -29,7 +29,20 @@ export default function Home() {
 
   const createInstantMeeting = async () => {
     if (!ensureAuth("/")) return;
-    router.push(`/room/${crypto.randomUUID()}`);
+    const scheduledAt = new Date(Date.now() + 60_000).toISOString();
+    const response = await fetch(`${BACKEND_URL}/api/meetings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.backendToken}` },
+      body: JSON.stringify({ title: "Instant Rauma Meeting", scheduledAt, visibility: "public" }),
+    });
+    const meeting = await response.json();
+    if (!response.ok) throw new Error(meeting.error || "Could not create meeting.");
+    const startResponse = await fetch(`${BACKEND_URL}/api/meetings/${meeting.roomId}/start`, {
+      method: "POST", headers: { Authorization: `Bearer ${session.backendToken}` },
+    });
+    const started = await startResponse.json();
+    if (!startResponse.ok) throw new Error(started.error || "Could not start meeting.");
+    router.push(`/room/${meeting.roomId}`);
   };
 
   const scheduleMeeting = async ({ title, scheduledAt }) => {
@@ -102,7 +115,13 @@ export default function Home() {
           <HeroCopy onCreate={() => setModal("create")} onJoin={() => setModal("join")} />
           <MeetingHeroVisual onAddMeeting={() => { if (ensureAuth("/")) setModal("add"); }} />
         </section>
-        <div className="mt-2 sm:mt-5"><FeatureStrip /></div>
+        <div className="mt-2 sm:mt-5">
+          <FeatureStrip
+            onInstant={() => { if (ensureAuth("/")) createInstantMeeting(); }}
+            onSchedule={() => { if (ensureAuth("/schedule")) router.push("/schedule"); }}
+            onJoin={() => { if (ensureAuth("/")) setModal("join"); }}
+          />
+        </div>
       </div>
 
       {(modal === "create" || modal === "join") && <MeetingActionModal mode={modal} onClose={() => setModal(null)} onCreateInstant={createInstantMeeting} onSchedule={scheduleMeeting} onJoin={async (roomId) => { try { await joinMeeting(roomId); } catch (error) { setJoinError(error.message); throw error; } }} />}

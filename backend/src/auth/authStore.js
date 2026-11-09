@@ -42,7 +42,9 @@ export const sanitizeUser = (user) => {
     username: user.username || null,
     email: user.email || null,
     name: user.name || user.username || user.email || "Guest",
-    image: user.image || null,
+    displayName: user.displayName || user.name || user.username || user.email || "Guest",
+    image: user.avatarUrl || user.image || null,
+    avatarUrl: user.avatarUrl || user.image || null,
     provider: user.provider,
   };
 };
@@ -71,7 +73,9 @@ export const createPasswordUser = ({ username, password }) => {
     username: cleanUsername,
     email: null,
     name: cleanUsername,
+    displayName: cleanUsername,
     image: null,
+    avatarUrl: null,
     provider: "credentials",
     passwordSalt: salt,
     passwordHash,
@@ -112,7 +116,9 @@ export const upsertGoogleUser = ({ providerAccountId, email, name, image }) => {
     const existing = users[index];
     existing.email = normalizedEmail || existing.email || null;
     existing.name = name || existing.name || existing.email || "Google User";
+    existing.displayName = existing.displayName || existing.name;
     existing.image = image || existing.image || null;
+    existing.avatarUrl = existing.avatarUrl || null;
     writeUsers(users);
     return sanitizeUser(existing);
   }
@@ -126,7 +132,9 @@ export const upsertGoogleUser = ({ providerAccountId, email, name, image }) => {
     existing.provider = "google";
     existing.providerAccountId = providerAccountId;
     existing.name = name || existing.name;
+    existing.displayName = existing.displayName || existing.name;
     existing.image = image || existing.image;
+    existing.avatarUrl = existing.avatarUrl || null;
     writeUsers(users);
     return sanitizeUser(existing);
   }
@@ -147,7 +155,9 @@ export const upsertGoogleUser = ({ providerAccountId, email, name, image }) => {
     username,
     email: normalizedEmail || null,
     name: name || normalizedEmail || "Google User",
+    displayName: name || normalizedEmail || "Google User",
     image: image || null,
+    avatarUrl: null,
     provider: "google",
     providerAccountId,
     passwordSalt: null,
@@ -156,6 +166,26 @@ export const upsertGoogleUser = ({ providerAccountId, email, name, image }) => {
   };
 
   users.push(user);
+  writeUsers(users);
+  return sanitizeUser(user);
+};
+
+
+export const updateUserProfile = (userId, { displayName, avatarUrl } = {}) => {
+  const users = readUsers();
+  const user = users.find((item) => item.id === userId);
+  if (!user) return null;
+
+  if (displayName !== undefined) {
+    const cleanName = String(displayName || "").trim();
+    if (!cleanName || cleanName.length > 40 || /[\x00-\x1f\x7f]/.test(cleanName)) {
+      throw new Error("Display name must be 1-40 characters.");
+    }
+    user.displayName = cleanName;
+  }
+  if (avatarUrl !== undefined) {
+    user.avatarUrl = avatarUrl || null;
+  }
   writeUsers(users);
   return sanitizeUser(user);
 };

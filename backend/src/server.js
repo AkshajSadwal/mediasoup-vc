@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import http from "http";
+import path from "path";
+import { fileURLToPath } from "url";
 import cors from "cors";
 import { Server } from "socket.io";
 
@@ -14,7 +16,10 @@ import authRoutes from "./http/authRoutes.js";
 import meetingRoutes from "./http/meetingRoutes.js";
 
 const app = express();
-app.use(express.json());
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const profilePicturesDir = path.resolve(__dirname, "../../data/profile-pictures");
+app.use("/profile-pictures", express.static(profilePicturesDir, { fallthrough: false, maxAge: "7d", immutable: true }));
+app.use(express.json({ limit: "8mb" }));
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:3000",

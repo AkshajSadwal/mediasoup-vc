@@ -36,12 +36,13 @@ const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account, profile }) {
+    async jwt({ token, user, account, profile, trigger }) {
       if (user?.authToken) {
         token.backendToken = user.authToken;
         token.userId = user.user?.id || user.id;
         token.username = user.user?.username || user.username;
         token.name = user.user?.name || user.name || token.username;
+        token.displayName = user.user?.displayName || user.displayName || token.name;
         token.image = user.user?.image || user.image || null;
       }
 
@@ -66,16 +67,35 @@ const authOptions = {
         token.userId = data.user.id;
         token.username = data.user.username;
         token.name = data.user.name || data.user.username;
+        token.displayName = data.user.displayName || token.name;
         token.image = data.user.image || null;
       }
 
+      if (trigger === "update" && token.backendToken) {
+        try {
+          const response = await fetch(`${backendUrl}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token.backendToken}` },
+            cache: "no-store",
+          });
+          if (response.ok) {
+            const { user: currentUser } = await response.json();
+            token.displayName = currentUser.displayName || currentUser.name || token.username;
+            token.image = currentUser.image || null;
+            token.username = currentUser.username || token.username;
+            token.name = currentUser.name || token.name;
+          }
+        } catch (error) {
+          console.error("Could not refresh account profile:", error.message);
+        }
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.userId;
         session.user.username = token.username;
-        session.user.name = token.name || token.username;
+        session.user.name = token.displayName || token.name || token.username;
+        session.user.displayName = token.displayName || token.name || token.username;
         session.user.image = token.image || null;
       }
       session.backendToken = token.backendToken;

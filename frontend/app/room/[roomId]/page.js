@@ -44,7 +44,9 @@ export default function Home() {
       connected: participant.connected ?? true,
       name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
       username: participant.username || null,
+      avatarUrl: participant.avatarUrl || null,
       isAdmin: Boolean(participant.isAdmin),
+      isModerator: Boolean(participant.isModerator),
       adminMuted: Boolean(participant.adminMuted),
     };
 
@@ -62,11 +64,13 @@ export default function Home() {
       return [...prev, {
         peerId: participant.peerId,
         username: participant.username || null,
+        avatarUrl: participant.avatarUrl || null,
         name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
         audioEnabled: participant.audioEnabled ?? true,
         videoEnabled: participant.videoEnabled ?? true,
         connected: participant.connected ?? true,
         isAdmin: Boolean(participant.isAdmin),
+        isModerator: Boolean(participant.isModerator),
         adminMuted: Boolean(participant.adminMuted),
       }];
     });
@@ -108,10 +112,17 @@ export default function Home() {
   const [adminBusyPeerId, setAdminBusyPeerId] = useState(null);
   const [localParticipantInfo, setLocalParticipantInfo] = useState(null);
   const [adminMuted, setAdminMuted] = useState(false);
+  const [meetingVisibility, setMeetingVisibility] = useState("public");
+  const [joinRequests, setJoinRequests] = useState([]);
 
-  const localName = session?.user?.username || session?.user?.name || "You";
+  const localName = session?.user?.displayName || session?.user?.name || session?.user?.username || "You";
+  const localAvatarUrl = session?.user?.image ? (session.user.image.startsWith("http") ? session.user.image : `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}${session.user.image}`) : null;
   const localPeerId = socketRef.current?.id || null;
   const localIsAdmin = Boolean(localParticipantInfo?.isAdmin);
+  const localIsModerator = Boolean(localParticipantInfo?.isModerator);
+  const localIsHost = localIsAdmin;
+  const canModerate = localIsHost || localIsModerator;
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
   const openPanel = (tab = "chat") => {
     setPanelTab(tab);
@@ -133,7 +144,7 @@ export default function Home() {
   };
 
   const adminMuteParticipant = (targetPeerId, muted) => {
-    if (!socketRef.current || !localIsAdmin) return;
+    if (!socketRef.current || !canModerate) return;
     setAdminBusyPeerId(targetPeerId);
     socketRef.current.emit("admin-mute-participant", { targetPeerId, muted }, (response) => {
       setAdminBusyPeerId(null);
@@ -142,7 +153,7 @@ export default function Home() {
   };
 
   const adminRemoveParticipant = (targetPeerId) => {
-    if (!socketRef.current || !localIsAdmin) return;
+    if (!socketRef.current || !canModerate) return;
     setAdminBusyPeerId(targetPeerId);
     socketRef.current.emit("admin-remove-participant", { targetPeerId }, (response) => {
       setAdminBusyPeerId(null);
@@ -150,6 +161,58 @@ export default function Home() {
       else showMessage("Participant removed");
     });
   };
+
+  const meetingApi = async (path, options = {}) => {
+    const response = await fetch(`${BACKEND_URL}/api/meetings/${roomName}${path}`, {
+      ...options,
+      headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${session?.backendToken}`, ...(options.headers || {}) },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Meeting request failed.");
+    return data;
+  };
+
+  const changeVisibility = async (visibility) => {
+    try {
+      const data = await meetingApi("/settings", { method: "PATCH", body: JSON.stringify({ visibility }) });
+      setMeetingVisibility(data.visibility);
+      showMessage(`Meeting is now ${visibility}.`);
+    } catch (error) { showMessage(error.message); }
+  };
+
+  const resolveJoinRequest = async (userId, approved) => {
+    try {
+      const data = await meetingApi(`/requests/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ approved }) });
+      setJoinRequests(data.joinRequests || []);
+      showMessage(approved ? "Join request approved." : "Join request denied.");
+    } catch (error) { showMessage(error.message); }
+  };
+
+  const toggleModerator = async (userId, enabled) => {
+    if (!userId || !localIsHost) return;
+    try {
+      const data = await meetingApi(`/moderators/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ enabled }) });
+      setJoinRequests(data.joinRequests || []);
+      showMessage(enabled ? "Moderator role granted." : "Moderator role removed.");
+      // The participant reconnects to refresh the server-authoritative role.
+    } catch (error) { showMessage(error.message); }
+  };
+
+  useEffect(() => {
+    if (!session?.backendToken || !roomName) return;
+    let active = true;
+    const refreshMeeting = async () => {
+      try {
+        const data = await meetingApi("");
+        if (!active) return;
+        setMeetingVisibility(data.visibility || "public");
+        setJoinRequests(data.joinRequests || []);
+      } catch (error) { console.warn("MEETING SETTINGS LOAD FAILED", error); }
+    };
+    refreshMeeting();
+    const timer = window.setInterval(refreshMeeting, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [roomName, session?.backendToken]);
 
   const paramsRef = useRef({
     encodings: [
@@ -836,7 +899,7 @@ export default function Home() {
               router.replace(`/login?callbackUrl=${encodeURIComponent(`/room/${roomName}`)}`);
               return;
             }
-            if (response.error === "WAITING_ROOM") {
+            if (response.error === "WAITING_ROOM" || response.error === "JOIN_APPROVAL_REQUIRED") {
               router.replace(`/waiting/${roomName}`);
               return;
             }
@@ -865,6 +928,7 @@ export default function Home() {
               name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
               username: participant.username || null,
               isAdmin: Boolean(participant.isAdmin),
+        isModerator: Boolean(participant.isModerator),
               adminMuted: Boolean(participant.adminMuted),
             };
           }
@@ -1024,6 +1088,9 @@ export default function Home() {
 
     socket.on("participant-state", (participant) => {
       upsertParticipant(participant);
+      if (participant.peerId === socket.id) {
+        setLocalParticipantInfo((previous) => ({ ...(previous || {}), ...participant }));
+      }
 
       setRemoteStreams((prev) =>
         prev.map((item) =>
@@ -1131,8 +1198,8 @@ export default function Home() {
       className="
         min-h-screen
         h-screen
-        bg-[#0d0d0d]
-        text-white
+        bg-[radial-gradient(ellipse_at_top,#edf5ff_0%,#f8fbff_42%,#ffffff_100%)]
+        text-[#172033]
         flex
         flex-col
         overflow-hidden
@@ -1142,6 +1209,7 @@ export default function Home() {
         roomName={roomName}
         participantCount={participants.length + 1}
         localName={localName}
+        localAvatarUrl={localAvatarUrl}
         localIsAdmin={localIsAdmin}
       />
 
@@ -1152,6 +1220,7 @@ export default function Home() {
         videoEnabled={videoEnabled}
         participants={participants}
         localName={localName}
+        localAvatarUrl={localAvatarUrl}
         localIsAdmin={localIsAdmin}
       />
 
@@ -1177,7 +1246,15 @@ export default function Home() {
         participants={participants}
         localPeerId={localPeerId}
         localName={localName}
+        localAvatarUrl={localAvatarUrl}
         isAdmin={localIsAdmin}
+        isHost={localIsHost}
+        isModerator={localIsModerator}
+        visibility={meetingVisibility}
+        onVisibilityChange={changeVisibility}
+        joinRequests={joinRequests}
+        onApproveRequest={resolveJoinRequest}
+        onPromoteModerator={toggleModerator}
         onAdminMute={adminMuteParticipant}
         onAdminRemove={adminRemoveParticipant}
         adminBusyPeerId={adminBusyPeerId}

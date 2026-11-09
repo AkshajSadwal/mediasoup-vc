@@ -12,6 +12,7 @@ export default function SchedulePage() {
   const router = useRouter();
   const [title, setTitle] = useState("Rauma Meeting");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [visibility, setVisibility] = useState("public");
   const [error, setError] = useState("");
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,7 @@ export default function SchedulePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.backendToken}`,
         },
-        body: JSON.stringify({ title, scheduledAt: new Date(scheduledAt).toISOString() }),
+        body: JSON.stringify({ title, scheduledAt: new Date(scheduledAt).toISOString(), visibility }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not schedule meeting.");
@@ -56,6 +57,7 @@ export default function SchedulePage() {
           {!meeting ? (
             <form onSubmit={create} className="mt-8 space-y-5">
               <label className="block"><span className="mb-2 block text-sm text-white/60">Meeting title</span><input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400" /></label>
+              <label className="block"><span className="mb-2 block text-sm text-white/60">Who can join?</span><select value={visibility} onChange={(e) => setVisibility(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white"><option value="public">Public — anyone with the meeting link</option><option value="private">Private — approval required</option></select></label>
               <label className="block"><span className="mb-2 block text-sm text-white/60">Date and time</span><input required type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400 [color-scheme:dark]" /></label>
               {error && <p className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
               <button disabled={loading} className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-3 font-semibold disabled:opacity-50">{loading ? "Scheduling..." : "Reserve meeting room"}</button>

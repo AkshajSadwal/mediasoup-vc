@@ -8,6 +8,7 @@ export default function LocalVideo({
   videoEnabled,
   name = "You",
   isAdmin = false,
+  avatarUrl = null,
 }) {
 
   return (
@@ -21,9 +22,9 @@ export default function LocalVideo({
         rounded-2xl
         overflow-hidden
         border
-        border-white/10
-        bg-black
-        shadow-2xl
+        border-[#dce6f2]
+        bg-[#14243a]
+        shadow-[0_18px_45px_rgba(30,55,90,0.14)]
       "
     >
 
@@ -50,13 +51,10 @@ export default function LocalVideo({
             flex
             items-center
             justify-center
-            bg-black
+            bg-[#14243a]
           "
         >
-          <VideoOff
-            size={40}
-            className="text-gray-400"
-          />
+          {avatarUrl ? <img src={avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white/15" /> : <VideoOff size={40} className="text-white" />}
         </div>
       )}
 
@@ -78,8 +76,9 @@ export default function LocalVideo({
         <span
           className="
             rounded-full
-            bg-black/60
+            bg-black/65
             px-3
+            text-white
             py-1
             text-sm
             backdrop-blur
@@ -88,7 +87,7 @@ export default function LocalVideo({
           <span className="flex items-center gap-2">
             {name}
             {isAdmin && (
-              <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+              <span className="rounded-full bg-[#176df3]/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-200">
                 Admin
               </span>
             )}
@@ -96,7 +95,7 @@ export default function LocalVideo({
         </span>
 
         <div className="flex gap-2">
-          <div className="rounded-full bg-black/60 p-2">
+          <div className="rounded-full bg-black/65 p-2 text-white">
             {audioEnabled ? (
               <Mic size={16} />
             ) : (
