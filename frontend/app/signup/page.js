@@ -8,14 +8,17 @@ import { Video, UserPlus, Globe } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
+function getSafeCallbackUrl() {
+  if (typeof window === "undefined") return "/";
+  const value = new URLSearchParams(window.location.search).get("callbackUrl");
+  return value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/";
+}
+
 export default function SignupPage() {
   const router = useRouter();
-  const [callbackUrl, setCallbackUrl] = useState("/");
   const [googleEnabled, setGoogleEnabled] = useState(false);
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get("callbackUrl");
-    setCallbackUrl(value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/");
     getProviders()
       .then((providers) => setGoogleEnabled(Boolean(providers?.google)))
       .catch(() => setGoogleEnabled(false));
@@ -42,6 +45,7 @@ export default function SignupPage() {
         throw new Error(data.error || "Could not create account. Please try again.");
       }
 
+      const callbackUrl = getSafeCallbackUrl();
       const result = await signIn("credentials", {
         username,
         password,
@@ -65,7 +69,7 @@ export default function SignupPage() {
         <p className="mt-2 text-[#64748b]">Use a username and password for your Rauma account.</p>
 
         {googleEnabled && (
-          <button type="button" onClick={() => signIn("google", { callbackUrl })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
+          <button type="button" onClick={() => signIn("google", { callbackUrl: getSafeCallbackUrl() })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
             <Globe size={20} /> Continue with Google
           </button>
         )}
@@ -79,7 +83,10 @@ export default function SignupPage() {
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
           <button disabled={loading} className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#176df3] text-white shadow-[0_12px_26px_rgba(23,109,243,0.20)] hover:bg-[#0f63e8] px-4 py-3 font-semibold disabled:opacity-50"><UserPlus size={18} /> {loading ? "Creating..." : "Create account"}</button>
         </form>
-        <p className="mt-6 text-center text-sm text-[#64748b]">Already have an account? <Link className="text-[#176df3]" href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Sign in</Link></p>
+        <p className="mt-6 text-center text-sm text-[#64748b]">Already have an account? <Link className="text-[#176df3]" href="/login" onClick={(event) => {
+          event.preventDefault();
+          router.push(`/login?callbackUrl=${encodeURIComponent(getSafeCallbackUrl())}`);
+        }}>Sign in</Link></p>
       </div>
     </main>
   );

@@ -7,14 +7,17 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Video, Globe, LogIn } from "lucide-react";
 
+function getSafeCallbackUrl() {
+  if (typeof window === "undefined") return "/";
+  const value = new URLSearchParams(window.location.search).get("callbackUrl");
+  return value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/";
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [callbackUrl, setCallbackUrl] = useState("/");
   const [googleEnabled, setGoogleEnabled] = useState(false);
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get("callbackUrl");
-    setCallbackUrl(value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/");
     getProviders()
       .then((providers) => setGoogleEnabled(Boolean(providers?.google)))
       .catch(() => setGoogleEnabled(false));
@@ -29,6 +32,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
+    const callbackUrl = getSafeCallbackUrl();
     const result = await signIn("credentials", {
       username,
       password,
@@ -56,7 +60,7 @@ export default function LoginPage() {
         <p className="mt-2 text-[#64748b]">Sign in to schedule and host meetings.</p>
 
         {googleEnabled && (
-          <button type="button" onClick={() => signIn("google", { callbackUrl })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
+          <button type="button" onClick={() => signIn("google", { callbackUrl: getSafeCallbackUrl() })} className="mt-6 w-full flex items-center justify-center gap-3 rounded-xl border border-[#dce5f0] bg-[#f8fbff] px-4 py-3 font-semibold text-[#172033] hover:bg-[#eef5ff] transition">
             <Globe size={20} /> Continue with Google
           </button>
         )}
@@ -72,7 +76,10 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#64748b]">New to Rauma? <Link className="text-[#176df3] hover:text-[#0f63e8]" href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Create an account</Link></p>
+        <p className="mt-6 text-center text-sm text-[#64748b]">New to Rauma? <Link className="text-[#176df3] hover:text-[#0f63e8]" href="/signup" onClick={(event) => {
+            event.preventDefault();
+            router.push(`/signup?callbackUrl=${encodeURIComponent(getSafeCallbackUrl())}`);
+          }}>Create an account</Link></p>
       </motion.div>
     </main>
   );

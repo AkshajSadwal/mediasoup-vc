@@ -65,7 +65,7 @@ export default function AddMeetingModal({ session, onClose, onSaved }) {
     <div className="fixed inset-0 z-[100] grid place-items-center bg-[#132033]/28 p-5 backdrop-blur-[7px]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="w-full max-w-[500px] rounded-[28px] border border-[#e6ebf2] bg-white shadow-[0_30px_100px_rgba(22,38,66,0.22)]">
         <div className="flex items-start justify-between px-7 pb-5 pt-6">
-          <div><h2 className="text-[23px] font-semibold tracking-[-0.03em] text-[#111827]">Add meeting</h2><p className="mt-1 text-[13px] text-[#778397]">Add someone else's scheduled meeting to your calendar.</p></div>
+          <div><h2 className="text-[23px] font-semibold tracking-[-0.03em] text-[#111827]">Add meeting</h2><p className="mt-1 text-[13px] text-[#778397]">Add someone&apos;s scheduled meeting to your calendar.</p></div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-[#738096] hover:bg-[#f3f6fa]" aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
         <div className="px-7 pb-7">

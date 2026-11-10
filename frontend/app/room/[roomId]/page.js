@@ -114,10 +114,10 @@ export default function Home() {
   const [adminMuted, setAdminMuted] = useState(false);
   const [meetingVisibility, setMeetingVisibility] = useState("public");
   const [joinRequests, setJoinRequests] = useState([]);
+  const [localPeerId, setLocalPeerId] = useState(null);
 
   const localName = session?.user?.displayName || session?.user?.name || session?.user?.username || "You";
   const localAvatarUrl = session?.user?.image ? (session.user.image.startsWith("http") ? session.user.image : `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}${session.user.image}`) : null;
-  const localPeerId = socketRef.current?.id || null;
   const localIsAdmin = Boolean(localParticipantInfo?.isAdmin);
   const localIsModerator = Boolean(localParticipantInfo?.isModerator);
   const localIsHost = localIsAdmin;
@@ -1027,10 +1027,12 @@ export default function Home() {
       joinInProgressRef.current = false;
 
       console.log("connected", socket.id);
+      setLocalPeerId(socket.id || null);
       joinRoom();
     });
 
     socket.on("disconnect", (reason) => {
+      setLocalPeerId(null);
       if (!mountedRef.current) return;
 
       console.warn("SOCKET DISCONNECTED", reason);
