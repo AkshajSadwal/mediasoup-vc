@@ -94,6 +94,10 @@ export default function Home() {
   };
 
   const meetingAction = (action) => {
+    if (action === "config") {
+      if (ensureAuth("/config-meeting")) router.push("/config-meeting");
+      return;
+    }
     if (action === "schedule") {
       if (!ensureAuth("/schedule")) return;
       router.push("/schedule");
@@ -124,7 +128,7 @@ export default function Home() {
         </div>
       </div>
 
-      {(modal === "create" || modal === "join") && <MeetingActionModal mode={modal} onClose={() => setModal(null)} onCreateInstant={createInstantMeeting} onSchedule={scheduleMeeting} onJoin={async (roomId) => { try { await joinMeeting(roomId); } catch (error) { setJoinError(error.message); throw error; } }} />}
+      {(modal === "create" || modal === "join") && <MeetingActionModal mode={modal} onClose={() => setModal(null)} onCreateInstant={createInstantMeeting} onSchedule={scheduleMeeting} onConfigure={() => meetingAction("config")} onJoin={async (roomId) => { try { await joinMeeting(roomId); } catch (error) { setJoinError(error.message); throw error; } }} />}
       {modal === "add" && <AddMeetingModal session={session} onClose={() => setModal(null)} onSaved={() => {}} />}
       {joinError && <div className="fixed bottom-6 left-1/2 z-[120] -translate-x-1/2 rounded-full border border-[#d8e0ea] bg-white px-4 py-2 text-[12px] font-medium text-[#536173] shadow-[0_12px_30px_rgba(15,23,42,0.12)]">{joinError}</div>}
     </main>

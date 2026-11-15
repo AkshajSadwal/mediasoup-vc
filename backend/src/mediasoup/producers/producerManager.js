@@ -9,11 +9,13 @@ export const addProducer = ({
   producer,
   roomName,
   socketId,
+  source,
 }) => {
   const producerData = {
     producer,
     roomName,
     socketId,
+    source,
   };
 
   producers.push(producerData);
@@ -40,6 +42,7 @@ export const getProducersByRoom = (roomName, socketId) => {
     .map((producerData) => ({
       producerId: producerData.producer.id,
       peerId: producerData.socketId,
+      source: producerData.source,
     }));
 };
 
@@ -81,4 +84,3 @@ export const closeAllProducers = () => {
     removeProducer(item.producer.id, true);
   }
 };
-

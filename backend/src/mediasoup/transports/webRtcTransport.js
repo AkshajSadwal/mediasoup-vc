@@ -18,6 +18,11 @@ const createWebRtcTransport = async (router) => {
     ],
     enableUdp: true,
     enableTcp: true,
+    enableSctp: true,
+    maxSendMessageSize: 32768,
+    maxReceiveMessageSize: 32768,
+    sctpSendBufferSize: 262144,
+    sctpPerStreamSendQueueLimit: 196608,
     preferUdp: true,
   });
 

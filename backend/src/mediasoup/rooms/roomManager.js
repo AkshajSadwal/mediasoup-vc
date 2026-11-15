@@ -1,10 +1,12 @@
+import { getProducers } from "../producers/producerManager.js";
+import { getPeer } from "../peers/peerManager.js";
 import Room from "./room.js";
 import {
   getWorker,
   getMediaCodecs,
 } from "../workers/workerManager.js";
 
-const rooms = {};
+const rooms = Object.create(null);
 const roomCreationPromises = new Map();
 
 export const createRoom = async (roomName, socketId, adminUserId = null) => {
@@ -34,6 +36,32 @@ export const createRoom = async (roomName, socketId, adminUserId = null) => {
         adminUserId,
       );
 
+      const observer = await router.createAudioLevelObserver({ maxEntries: 1, threshold: -58, interval: 580 }).catch(() => null);
+      room.audioObserver = observer;
+      let namespace;
+      let changedAt = 0;
+      let silenceTimer;
+      const speaker = (userId) => {
+        if (room.speaker === userId) return;
+        room.speaker = userId;
+        changedAt = Date.now();
+        namespace?.to(roomName).emit("active-speaker", { userId });
+      };
+      observer?.on("volumes", ([entry]) => {
+        const source = getProducers().find(({ producer }) => entry?.producer === producer);
+        const peer = source && getPeer(source.socketId);
+        if (peer?.ready && peer.roomName === roomName) {
+          clearTimeout(silenceTimer);
+          namespace = peer.socket.nsp;
+          if (!room.speaker || Date.now() - changedAt >= 2000) speaker(peer.userId);
+        }
+      });
+      observer?.on("silence", () => {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => speaker(null), 2000);
+        silenceTimer.unref();
+      });
+      router.observer.once("close", () => clearTimeout(silenceTimer));
       rooms[roomName] = room;
       return room;
     })();

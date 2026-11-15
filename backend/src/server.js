@@ -13,6 +13,7 @@ import { closeAllTransports } from "./mediasoup/transports/transportManager.js";
 import { closeAllRooms } from "./mediasoup/rooms/roomManager.js";
 import initializeSocket from "./socket/index.js";
 import authRoutes from "./http/authRoutes.js";
+import { reconcileStoredBreakouts } from "./meetings/meetingStore.js";
 import meetingRoutes from "./http/meetingRoutes.js";
 
 const app = express();
@@ -36,6 +37,7 @@ app.use("/api/meetings", meetingRoutes);
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  maxHttpBufferSize: 64 * 1024,
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
@@ -44,6 +46,7 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 4000;
 
+reconcileStoredBreakouts();
 await initializeWorker();
 initializeSocket(io);
 

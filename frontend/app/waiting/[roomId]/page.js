@@ -48,7 +48,7 @@ export default function WaitingRoomPage() {
           const accessResponse = await fetch(`${BACKEND_URL}/api/meetings/${roomId}/access`, { headers: { Authorization: `Bearer ${session.backendToken}` } });
           const access = await accessResponse.json();
           if (data.open && access.canJoin) { router.replace(`/room/${roomId}`); return; }
-          setRequestStatus(access.requestStatus || (access.canJoin ? "approved" : null) || requestStatus || "not_requested");
+          setRequestStatus((prior) => access.requestStatus || (access.canJoin ? "approved" : null) || prior || "not_requested");
         }
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -141,9 +141,9 @@ export default function WaitingRoomPage() {
           <div className="flex items-center gap-3">
             <CalendarClock className="text-[#176df3]" />
             <div>
-              <div className="text-xs text-[#8795a8]">Scheduled for</div>
+              <div className="text-xs text-[#8795a8]">{meeting.scheduledAt ? "Scheduled for" : "Opening"}</div>
               <div className="font-medium">
-                {new Date(meeting.scheduledAt).toLocaleString()}
+                {meeting.scheduledAt ? new Date(meeting.scheduledAt).toLocaleString() : "When the host starts the meeting"}
               </div>
             </div>
           </div>

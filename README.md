@@ -244,3 +244,7 @@ No `LICENSE` file is currently present. Add an appropriate license before inviti
 - [WebRTC](https://webrtc.org/)
 - [Next.js](https://nextjs.org/)
 - [Socket.IO](https://socket.io/)
+
+## Live meeting architecture and local verification
+
+See [Live meeting implementation](docs/live-meeting.md) for the event and permission contracts, browser requirements, and verification commands.

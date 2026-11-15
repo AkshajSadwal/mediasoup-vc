@@ -1,1268 +1,221 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
-import * as mediasoupClient from "mediasoup-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-
+import { useMeetingOutput } from "@/components/room/DeviceSettings";
+import MeetingConfiguration, { emptyConfiguration } from "@/components/room/MeetingConfiguration";
 import RoomHeader from "@/components/room/RoomHeader";
-import VideoGrid from "@/components/room/VideoGrid";
+import VideoGrid, { MeetingAudio } from "@/components/room/VideoGrid";
 import BottomControls from "@/components/room/BottomControls";
-import ToastMessage from "@/components/room/ToastMessage";
 import MeetingPanel from "@/components/room/MeetingPanel";
+import MeetingTools from "@/components/room/MeetingTools";
+import Whiteboard from "@/components/room/Whiteboard";
+import Polls from "@/components/room/Polls";
+import Files from "@/components/room/Files";
+import Recording from "@/components/room/Recording";
+import Backgrounds from "@/components/room/Backgrounds";
+import { useMeetingSession } from "@/components/room/hooks/useMeetingSession";
+import { useMeetingAdmission } from "@/components/room/hooks/useMeetingAdmission";
+import { useFiles } from "@/components/room/hooks/useFiles";
+import { useRecorder } from "@/components/room/hooks/useRecorder";
+import { useCaptions } from "@/components/room/hooks/useCaptions";
+import { useBackground } from "@/components/room/hooks/useBackground";
+import "@/components/room/meeting.css";
 
-export default function Home() {
-  const params = useParams();
-  const roomName = params.roomId;
+const corePanels = ["chat", "participants", "settings"];
+const titles = { attach: "Attach to chat", poll: "New poll", vote: "New vote", files: "File sharing", permissions: "Permissions",
+  hands: "Raised hands", breakouts: "Breakout rooms", recording: "Local recording", captions: "English server captions", backgrounds: "Camera background", sharing: "Screen sharing" };
+
+function Countdown({ until, breakout, offset }) {
+  const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((until - Date.now() - offset) / 1000)));
+  useEffect(() => {
+    const update = () => setSeconds(Math.max(0, Math.ceil((until - Date.now() - offset) / 1000)));
+    update();
+    const timer = setInterval(update, 250);
+    return () => clearInterval(timer);
+  }, [until, offset]);
+  return <p className="meeting-banner" role={seconds <= 15 ? "status" : undefined}>{breakout && seconds <= 15 ? "Returning to the main room in " : "Breakouts end in "}
+    {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</p>;
+}
+
+export default function MeetingPage() {
+  const { roomId: meetingId } = useParams();
   const router = useRouter();
-  const { data: session, status: sessionStatus } = useSession();
-
-  const socketRef = useRef(null);
-  const localVideoRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const deviceRef = useRef(null);
-  const producerTransportRef = useRef(null);
-  const consumerTransportRef = useRef(null);
-  const participantStatesRef = useRef({});
-  const consumersRef = useRef(new Map());
-  const remoteMediaStreamsRef = useRef(new Map());
-
-  const getTrackSignature = (stream) =>
-    stream
-      .getTracks()
-      .map((track) => `${track.kind}:${track.id}:${track.readyState}`)
-      .sort()
-      .join("|");
-
-  const upsertParticipant = (participant) => {
-    if (!participant?.peerId) return;
-
-    participantStatesRef.current[participant.peerId] = {
-      audioEnabled: participant.audioEnabled ?? true,
-      videoEnabled: participant.videoEnabled ?? true,
-      connected: participant.connected ?? true,
-      name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
-      username: participant.username || null,
-      avatarUrl: participant.avatarUrl || null,
-      isAdmin: Boolean(participant.isAdmin),
-      isModerator: Boolean(participant.isModerator),
-      adminMuted: Boolean(participant.adminMuted),
-    };
-
-    setParticipants((prev) => {
-      const existing = prev.find((item) => item.peerId === participant.peerId);
-
-      if (existing) {
-        return prev.map((item) =>
-          item.peerId === participant.peerId
-            ? { ...item, ...participant }
-            : item,
-        );
-      }
-
-      return [...prev, {
-        peerId: participant.peerId,
-        username: participant.username || null,
-        avatarUrl: participant.avatarUrl || null,
-        name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
-        audioEnabled: participant.audioEnabled ?? true,
-        videoEnabled: participant.videoEnabled ?? true,
-        connected: participant.connected ?? true,
-        isAdmin: Boolean(participant.isAdmin),
-        isModerator: Boolean(participant.isModerator),
-        adminMuted: Boolean(participant.adminMuted),
-      }];
-    });
-  };
-
-  const removeParticipant = (peerId) => {
-    delete participantStatesRef.current[peerId];
-
-    setParticipants((prev) =>
-      prev.filter((item) => item.peerId !== peerId),
-    );
-  };
-
-  const getCurrentSession = () => ({
-    generation: connectionGenerationRef.current,
-    socketId: socketRef.current?.id,
-  });
-
-  const isCurrentSession = (generation, socketId) =>
-    mountedRef.current &&
-    connectionGenerationRef.current === generation &&
-    socketRef.current?.id === socketId;
-  const consumerSetupRef = useRef(new Set());
-  const pendingProducerSignalsRef = useRef(new Map());
-  const closedProducerIdsRef = useRef(new Set());
-  const mountedRef = useRef(false);
-  const connectionGenerationRef = useRef(0);
-  const joinInProgressRef = useRef(false);
-
-  const [videoEnabled, setVideoEnabled] = useState(true);
-  const [audioEnabled, setAudioEnabled] = useState(true);
+  const { data: session, status } = useSession();
+  const userId = session?.user?.id;
   const [message, setMessage] = useState("");
-  const [remoteStreams, setRemoteStreams] = useState([]);
-  const [participants, setParticipants] = useState([]);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelTab, setPanelTab] = useState("chat");
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatDraft, setChatDraft] = useState("");
-  const [adminBusyPeerId, setAdminBusyPeerId] = useState(null);
-  const [localParticipantInfo, setLocalParticipantInfo] = useState(null);
-  const [adminMuted, setAdminMuted] = useState(false);
-  const [meetingVisibility, setMeetingVisibility] = useState("public");
-  const [joinRequests, setJoinRequests] = useState([]);
-  const [localPeerId, setLocalPeerId] = useState(null);
-
-  const localName = session?.user?.displayName || session?.user?.name || session?.user?.username || "You";
-  const localAvatarUrl = session?.user?.image ? (session.user.image.startsWith("http") ? session.user.image : `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}${session.user.image}`) : null;
-  const localIsAdmin = Boolean(localParticipantInfo?.isAdmin);
-  const localIsModerator = Boolean(localParticipantInfo?.isModerator);
-  const localIsHost = localIsAdmin;
-  const canModerate = localIsHost || localIsModerator;
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-
-  const openPanel = (tab = "chat") => {
-    setPanelTab(tab);
-    setPanelOpen(true);
-  };
-
-  const sendChatMessage = (event) => {
-    event.preventDefault();
-    const text = chatDraft.trim();
-    if (!text || !socketRef.current?.connected) return;
-
-    socketRef.current.emit("chat-message", { text }, (response) => {
-      if (response?.error) {
-        showMessage(response.error);
-        return;
-      }
-      setChatDraft("");
-    });
-  };
-
-  const adminMuteParticipant = (targetPeerId, muted) => {
-    if (!socketRef.current || !canModerate) return;
-    setAdminBusyPeerId(targetPeerId);
-    socketRef.current.emit("admin-mute-participant", { targetPeerId, muted }, (response) => {
-      setAdminBusyPeerId(null);
-      if (response?.error) showMessage(response.error);
-    });
-  };
-
-  const adminRemoveParticipant = (targetPeerId) => {
-    if (!socketRef.current || !canModerate) return;
-    setAdminBusyPeerId(targetPeerId);
-    socketRef.current.emit("admin-remove-participant", { targetPeerId }, (response) => {
-      setAdminBusyPeerId(null);
-      if (response?.error) showMessage(response.error);
-      else showMessage("Participant removed");
-    });
-  };
-
-  const meetingApi = async (path, options = {}) => {
-    const response = await fetch(`${BACKEND_URL}/api/meetings/${roomName}${path}`, {
-      ...options,
-      headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${session?.backendToken}`, ...(options.headers || {}) },
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Meeting request failed.");
-    return data;
-  };
-
-  const changeVisibility = async (visibility) => {
-    try {
-      const data = await meetingApi("/settings", { method: "PATCH", body: JSON.stringify({ visibility }) });
-      setMeetingVisibility(data.visibility);
-      showMessage(`Meeting is now ${visibility}.`);
-    } catch (error) { showMessage(error.message); }
-  };
-
-  const resolveJoinRequest = async (userId, approved) => {
-    try {
-      const data = await meetingApi(`/requests/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ approved }) });
-      setJoinRequests(data.joinRequests || []);
-      showMessage(approved ? "Join request approved." : "Join request denied.");
-    } catch (error) { showMessage(error.message); }
-  };
-
-  const toggleModerator = async (userId, enabled) => {
-    if (!userId || !localIsHost) return;
-    try {
-      const data = await meetingApi(`/moderators/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ enabled }) });
-      setJoinRequests(data.joinRequests || []);
-      showMessage(enabled ? "Moderator role granted." : "Moderator role removed.");
-      // The participant reconnects to refresh the server-authoritative role.
-    } catch (error) { showMessage(error.message); }
-  };
-
-  useEffect(() => {
-    if (!session?.backendToken || !roomName) return;
-    let active = true;
-    const refreshMeeting = async () => {
-      try {
-        const data = await meetingApi("");
-        if (!active) return;
-        setMeetingVisibility(data.visibility || "public");
-        setJoinRequests(data.joinRequests || []);
-      } catch (error) { console.warn("MEETING SETTINGS LOAD FAILED", error); }
-    };
-    refreshMeeting();
-    const timer = window.setInterval(refreshMeeting, 5000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [roomName, session?.backendToken]);
-
-  const paramsRef = useRef({
-    encodings: [
-      {
-        rid: "r0",
-        maxBitrate: 100000,
-        scalabilityMode: "S1T3",
-      },
-      {
-        rid: "r1",
-        maxBitrate: 300000,
-        scalabilityMode: "S1T3",
-      },
-      {
-        rid: "r2",
-        maxBitrate: 900000,
-        scalabilityMode: "S1T3",
-      },
-    ],
-    codecOptions: {
-      videoGoogleStartBitrate: 1000,
-    },
-  });
-
-  const showMessage = (text) => {
-    if (!mountedRef.current) return;
-
+  const timeout = useRef(null);
+  const notify = useCallback((text) => {
+    clearTimeout(timeout.current);
     setMessage(text);
-    window.setTimeout(() => setMessage(""), 2000);
+    timeout.current = setTimeout(() => setMessage(""), 4500);
+  }, []);
+  useEffect(() => () => clearTimeout(timeout.current), []);
+  const call = useMeetingSession({ meetingId, userId, authReady: status !== "loading", token: session?.backendToken, router, notify });
+  const { live } = call;
+  const output = useMeetingOutput(userId, notify);
+  const isHost = live?.role === "host";
+  const isModerator = live?.role === "moderator";
+  const admission = useMeetingAdmission(meetingId, session?.backendToken, isHost, notify);
+  const [panel, setPanel] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [menu, setMenu] = useState(null);
+  const [pin, setPin] = useState(null);
+  const [page, setPage] = useState(0);
+  const [localBoard, setLocalBoard] = useState(false);
+  const [hideBoard, setHideBoard] = useState(false);
+  const body = useRef(null);
+  const panelContainer = useRef(null);
+  const priorFocus = useRef(null);
+
+  const openPanel = (name) => {
+    if (!panel) priorFocus.current = document.activeElement;
+    setPanel(name);
   };
-
-  const toggleVideo = () => {
-    const videoTrack = paramsRef.current.videoTrack;
-    if (!videoTrack || !socketRef.current) return;
-
-    videoTrack.enabled = !videoTrack.enabled;
-    setVideoEnabled(videoTrack.enabled);
-
-    socketRef.current.emit("video-state", {
-      enabled: videoTrack.enabled,
+  const closePanel = useCallback(() => {
+    setPanel(null);
+    requestAnimationFrame(() => {
+      if (priorFocus.current instanceof HTMLElement && priorFocus.current.isConnected) priorFocus.current.focus();
     });
-  };
-
-  const toggleAudio = () => {
-    const audioTrack = paramsRef.current.audioTrack;
-    if (!audioTrack || !socketRef.current) return;
-
-    if (adminMuted && !audioTrack.enabled) {
-      showMessage("The admin has muted your microphone.");
-      return;
-    }
-
-    audioTrack.enabled = !audioTrack.enabled;
-    setAudioEnabled(audioTrack.enabled);
-
-    socketRef.current.emit("audio-state", {
-      enabled: audioTrack.enabled,
-    });
-  };
-
-  const copyRoomCode = async () => {
-    try {
-      await navigator.clipboard.writeText(roomName);
-      showMessage("Room code copied!");
-    } catch (error) {
-      console.error("ROOM CODE COPY FAILED", error);
-      showMessage("Could not copy room code");
-    }
-  };
-
-  const copyRoomLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      showMessage("Room link copied!");
-    } catch (error) {
-      console.error("ROOM LINK COPY FAILED", error);
-      showMessage("Could not copy room link");
-    }
-  };
-
-  const shareRoom = async () => {
-    try {
-      const link = window.location.href;
-
-      if (navigator.share) {
-        await navigator.share({
-          title: "Join my video room",
-          text: `Join my room: ${roomName}`,
-          url: link,
-        });
-      } else {
-        await copyRoomLink();
-      }
-    } catch (error) {
-      // Closing the native share dialog is not an application error.
-      if (error?.name !== "AbortError") {
-        console.error("ROOM SHARE FAILED", error);
-      }
-    }
-  };
-
-  const createProducerTransport = (generation, socketId) => {
-    return new Promise((resolve, reject) => {
-      if (!isCurrentSession(generation, socketId)) {
-        return reject(new Error("Connection changed while creating transport."));
-      }
-
-      socketRef.current.emit(
-        "createWebRtcTransport",
-        { sender: true },
-        ({ params }) => {
-          if (!isCurrentSession(generation, socketId)) {
-            return reject(new Error("Connection changed while creating transport."));
-          }
-
-          if (params?.error) {
-            return reject(new Error(params.error));
-          }
-
-          if (
-            !params?.id ||
-            !params?.iceParameters ||
-            !params?.iceCandidates ||
-            !params?.dtlsParameters
-          ) {
-            return reject(
-              new Error("Invalid producer transport parameters."),
-            );
-          }
-
-          try {
-            const transport = deviceRef.current.createSendTransport(params);
-            producerTransportRef.current = transport;
-
-            transport.on(
-              "connect",
-              ({ dtlsParameters }, callback, errback) => {
-                socketRef.current.emit(
-                  "transport-connect",
-                  { dtlsParameters },
-                  (error) => {
-                    if (error) {
-                      return errback(new Error(error));
-                    }
-                    callback();
-                  },
-                );
-              },
-            );
-
-            transport.on(
-              "produce",
-              (parameters, callback, errback) => {
-                socketRef.current.emit(
-                  "transport-produce",
-                  {
-                    kind: parameters.kind,
-                    rtpParameters: parameters.rtpParameters,
-                  },
-                  ({ id, error }) => {
-                    if (error) {
-                      return errback(new Error(error));
-                    }
-                    callback({ id });
-                  },
-                );
-              },
-            );
-
-            transport.on(
-              "connectionstatechange",
-              (state) => {
-                if (state === "failed" || state === "closed") {
-                  console.error(
-                    "PRODUCER TRANSPORT STATE:",
-                    state,
-                  );
-                }
-              },
-            );
-
-            resolve(transport);
-          } catch (error) {
-            reject(error);
-          }
-        },
-      );
-    });
-  };
-
-  const produce = async () => {
-    const { videoTrack, audioTrack, encodings, codecOptions } =
-      paramsRef.current;
-    const transport = producerTransportRef.current;
-
-    if (!transport || transport.closed) {
-      throw new Error("Producer transport is not available.");
-    }
-
-    if (videoTrack) {
-      await transport.produce({
-        track: videoTrack,
-        encodings,
-        codecOptions,
-      });
-    }
-
-    if (audioTrack) {
-      await transport.produce({
-        track: audioTrack,
-      });
-    }
-  };
-
-  const createConsumerTransport = (generation, socketId) => {
-    return new Promise((resolve, reject) => {
-      if (!isCurrentSession(generation, socketId)) {
-        return reject(new Error("Connection changed while creating transport."));
-      }
-
-      socketRef.current.emit(
-        "createWebRtcTransport",
-        { sender: false },
-        ({ params }) => {
-          if (!isCurrentSession(generation, socketId)) {
-            return reject(new Error("Connection changed while creating transport."));
-          }
-
-          if (params?.error) {
-            return reject(new Error(params.error));
-          }
-
-          if (
-            !params?.id ||
-            !params?.iceParameters ||
-            !params?.iceCandidates ||
-            !params?.dtlsParameters
-          ) {
-            return reject(
-              new Error("Invalid consumer transport parameters."),
-            );
-          }
-
-          try {
-            const transport = deviceRef.current.createRecvTransport(params);
-            consumerTransportRef.current = transport;
-
-            transport.on(
-              "connect",
-              ({ dtlsParameters }, callback, errback) => {
-                socketRef.current.emit(
-                  "transport-recv-connect",
-                  {
-                    dtlsParameters,
-                    serverConsumerTransportId: params.id,
-                  },
-                  (error) => {
-                    if (error) {
-                      return errback(new Error(error));
-                    }
-                    callback();
-                  },
-                );
-              },
-            );
-
-            transport.on(
-              "connectionstatechange",
-              (state) => {
-                console.log("CONSUMER TRANSPORT STATE:", state);
-                if (state === "failed" || state === "closed") {
-                  console.error(
-                    "CONSUMER TRANSPORT STATE:",
-                    state,
-                  );
-                }
-              },
-            );
-
-            resolve(transport);
-          } catch (error) {
-            reject(error);
-          }
-        },
-      );
-    });
-  };
-
-  const addRemoteConsumer = (
-    producerId,
-    peerId,
-    consumer,
-  ) => {
-    const savedState = participantStatesRef.current[peerId] || {
-      audioEnabled: true,
-      videoEnabled: true,
-    };
-
-    let stream = remoteMediaStreamsRef.current.get(peerId);
-
-    if (!stream) {
-      stream = new MediaStream();
-      remoteMediaStreamsRef.current.set(peerId, stream);
-    }
-
-    if (!stream.getTracks().some((track) => track.id === consumer.track.id)) {
-      stream.addTrack(consumer.track);
-    }
-
-    setRemoteStreams((prev) => {
-      const existing = prev.find(
-        (item) => item.peerId === peerId,
-      );
-
-      if (existing) {
-        return prev.map((item) =>
-          item.peerId === peerId
-            ? {
-                ...item,
-                producerIds: [
-                  ...new Set([
-                    ...item.producerIds,
-                    producerId,
-                  ]),
-                ],
-                // Keep the same MediaStream object for this peer.
-                // Replacing it while audio/video consumers arrive can
-                // interrupt video.play() with an AbortError.
-                stream,
-                trackSignature: getTrackSignature(stream),
-                audioEnabled: savedState.audioEnabled,
-                videoEnabled: savedState.videoEnabled,
-              }
-            : item,
-        );
-      }
-
-      return [
-        ...prev,
-        {
-          producerIds: [producerId],
-          peerId,
-          stream,
-          trackSignature: getTrackSignature(stream),
-          audioEnabled: savedState.audioEnabled,
-          videoEnabled: savedState.videoEnabled,
-        },
-      ];
-    });
-  };
-
-  const removeRemoteProducer = (producerId) => {
-    closedProducerIdsRef.current.add(producerId);
-    pendingProducerSignalsRef.current.delete(producerId);
-
-    const consumerData = consumersRef.current.get(producerId);
-    if (consumerData) {
-      try {
-        consumerData.consumer.close();
-      } catch (error) {
-        console.error("CONSUMER CLOSE FAILED", error);
-      }
-      consumersRef.current.delete(producerId);
-    }
-
-    setRemoteStreams((prev) =>
-      prev.flatMap((item) => {
-        if (!item.producerIds.includes(producerId)) {
-          return [item];
-        }
-
-        const remainingProducerIds = item.producerIds.filter(
-          (id) => id !== producerId,
-        );
-        const removedTrack = consumerData?.consumer?.track;
-
-        if (removedTrack && item.stream.getTracks().includes(removedTrack)) {
-          item.stream.removeTrack(removedTrack);
-        }
-
-        if (remainingProducerIds.length === 0) {
-          remoteMediaStreamsRef.current.delete(item.peerId);
-          return [];
-        }
-
-        return [
-          {
-            ...item,
-            producerIds: remainingProducerIds,
-            // Keep the same stream object; its track list is updated in place.
-            // Changing the signature forces RemoteVideo to retry playback after
-            // a video/audio track is added or removed.
-            stream: item.stream,
-            trackSignature: getTrackSignature(item.stream),
-          },
-        ];
-      }),
-    );
-  };
-
-  const consume = async (
-    producerId,
-    peerId,
-    transport,
-    transportId,
-    generation,
-    socketId,
-  ) => {
-    try {
-      await new Promise((resolve, reject) => {
-        if (!isCurrentSession(generation, socketId)) {
-          return reject(new Error("Connection changed while consuming media."));
-        }
-
-        socketRef.current.emit(
-          "consume",
-          {
-            rtpCapabilities: deviceRef.current.rtpCapabilities,
-            remoteProducerId: producerId,
-            serverConsumerTransportId: transportId,
-          },
-          async ({ params }) => {
-            if (!isCurrentSession(generation, socketId)) {
-              return reject(new Error("Connection changed while consuming media."));
-            }
-
-            if (params?.error) {
-              return reject(new Error(params.error));
-            }
-
-            if (
-              !params?.id ||
-              !params?.producerId ||
-              !params?.kind ||
-              !params?.rtpParameters ||
-              !params?.serverConsumerId
-            ) {
-              return reject(
-                new Error("Invalid consumer parameters."),
-              );
-            }
-
-            if (closedProducerIdsRef.current.has(producerId)) {
-              return resolve();
-            }
-
-            try {
-              const consumer = await transport.consume({
-                id: params.id,
-                producerId: params.producerId,
-                kind: params.kind,
-                rtpParameters: params.rtpParameters,
-                streamId: peerId,
-              });
-
-              if (closedProducerIdsRef.current.has(producerId)) {
-                consumer.close();
-                return resolve();
-              }
-
-              consumersRef.current.set(producerId, {
-                consumer,
-                peerId,
-                serverConsumerId: params.serverConsumerId,
-              });
-
-              console.log("REMOTE CONSUMER READY", {
-                producerId,
-                peerId,
-                kind: consumer.kind,
-                trackId: consumer.track.id,
-                trackReadyState: consumer.track.readyState,
-                trackMuted: consumer.track.muted,
-              });
-
-              consumer.track.addEventListener("ended", () => {
-                console.warn("REMOTE TRACK ENDED", {
-                  producerId,
-                  peerId,
-                  kind: consumer.kind,
-                });
-              });
-
-              consumer.on("transportclose", () => {
-                removeRemoteProducer(producerId);
-              });
-
-              consumer.on("trackended", () => {
-                // The producer can still exist after a track ends.
-                // The next producer/transport event will determine its state.
-              });
-
-              addRemoteConsumer(
-                producerId,
-                peerId,
-                consumer,
-              );
-
-              if (!isCurrentSession(generation, socketId)) {
-                consumer.close();
-                consumersRef.current.delete(producerId);
-                return resolve();
-              }
-
-              socketRef.current.emit("consumer-resume", {
-                serverConsumerId: params.serverConsumerId,
-              });
-
-              resolve();
-            } catch (error) {
-              reject(error);
-            }
-          },
-        );
-      });
-    } catch (error) {
-      console.error("CONSUME FAILED", error);
-      removeRemoteProducer(producerId);
-    } finally {
-      consumerSetupRef.current.delete(producerId);
-      pendingProducerSignalsRef.current.delete(producerId);
-    }
-  };
-
-  const signalNewConsumerTransport = (
-    producerId,
-    peerId,
-  ) => {
-    if (!producerId || closedProducerIdsRef.current.has(producerId)) {
-      return;
-    }
-
-    if (
-      consumersRef.current.has(producerId) ||
-      consumerSetupRef.current.has(producerId)
-    ) {
-      return;
-    }
-
-    if (
-      !socketRef.current ||
-      !deviceRef.current ||
-      !consumerTransportRef.current
-    ) {
-      pendingProducerSignalsRef.current.set(producerId, peerId);
-      return;
-    }
-
-    if (pendingProducerSignalsRef.current.has(producerId)) {
-      peerId = pendingProducerSignalsRef.current.get(producerId) || peerId;
-      pendingProducerSignalsRef.current.delete(producerId);
-    }
-
-    consumerSetupRef.current.add(producerId);
-
-    const { generation, socketId } = getCurrentSession();
-
-    consume(
-      producerId,
-      peerId,
-      consumerTransportRef.current,
-      consumerTransportRef.current.id,
-      generation,
-      socketId,
-    );
-  };
-
-  const flushPendingProducerSignals = () => {
-    const pending = [...pendingProducerSignalsRef.current.entries()];
-
-    pending.forEach(([producerId, peerId]) => {
-      if (closedProducerIdsRef.current.has(producerId)) {
-        pendingProducerSignalsRef.current.delete(producerId);
-        return;
-      }
-
-      pendingProducerSignalsRef.current.delete(producerId);
-      signalNewConsumerTransport(producerId, peerId);
-    });
-  };
-
-  const requestExistingProducers = () => {
-    socketRef.current.emit("getProducers", (producers) => {
-      if (!Array.isArray(producers)) return;
-
-      producers.forEach(({ producerId, peerId }) => {
-        signalNewConsumerTransport(producerId, peerId);
-      });
-    });
-  };
-
-  const getLocalStream = async (generation, socketId) => {
-    let stream = localStreamRef.current;
-
-    if (!stream) {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          width: 1280,
-          height: 720,
-        },
-      });
-    }
-
-    if (!isCurrentSession(generation, socketId)) {
-      if (stream !== localStreamRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      return;
-    }
-
-    if (!mountedRef.current) {
-      stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-
-    localStreamRef.current = stream;
-
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
-    }
-
-    paramsRef.current = {
-      ...paramsRef.current,
-      videoTrack: stream.getVideoTracks()[0],
-      audioTrack: stream.getAudioTracks()[0],
-    };
-
-    await createProducerTransport(generation, socketId);
-    await produce();
-  };
-
-  const cleanupMedia = ({ stopLocalTracks = true } = {}) => {
-    consumersRef.current.forEach(({ consumer }) => {
-      try {
-        consumer.close();
-      } catch (error) {
-        console.error("REMOTE CONSUMER CLEANUP FAILED", error);
-      }
-    });
-    consumersRef.current.clear();
-    consumerSetupRef.current.clear();
-    remoteMediaStreamsRef.current.clear();
-
-    try {
-      producerTransportRef.current?.close();
-    } catch (error) {
-      console.error("PRODUCER TRANSPORT CLEANUP FAILED", error);
-    }
-    producerTransportRef.current = null;
-
-    try {
-      consumerTransportRef.current?.close();
-    } catch (error) {
-      console.error("CONSUMER TRANSPORT CLEANUP FAILED", error);
-    }
-    consumerTransportRef.current = null;
-
-    if (stopLocalTracks && localStreamRef.current) {
-      localStreamRef.current
-        .getTracks()
-        .forEach((track) => track.stop());
-      localStreamRef.current = null;
-      paramsRef.current.videoTrack = null;
-      paramsRef.current.audioTrack = null;
-    }
-  };
-
-  const joinRoom = () => {
-    if (!socketRef.current || joinInProgressRef.current) return;
-
-    const { generation, socketId } = getCurrentSession();
-    joinInProgressRef.current = true;
-
-    socketRef.current.emit(
-      "joinRoom",
-      { roomName },
-      async (response) => {
-        try {
-          if (!isCurrentSession(generation, socketId)) return;
-
-          if (response?.error) {
-            if (response.error === "AUTH_REQUIRED") {
-              router.replace(`/login?callbackUrl=${encodeURIComponent(`/room/${roomName}`)}`);
-              return;
-            }
-            if (response.error === "WAITING_ROOM" || response.error === "JOIN_APPROVAL_REQUIRED") {
-              router.replace(`/waiting/${roomName}`);
-              return;
-            }
-            throw new Error(response.error);
-          }
-
-          if (!response?.rtpCapabilities) {
-            throw new Error("Room did not return RTP capabilities.");
-          }
-
-          setLocalParticipantInfo(response.self || null);
-          setAdminMuted(Boolean(response.self?.adminMuted));
-
-          setParticipants(
-            Array.isArray(response.participants)
-              ? response.participants
-              : [],
-          );
-
-          participantStatesRef.current = {};
-          for (const participant of response.participants || []) {
-            participantStatesRef.current[participant.peerId] = {
-              audioEnabled: participant.audioEnabled ?? true,
-              videoEnabled: participant.videoEnabled ?? true,
-              connected: true,
-              name: participant.name || participant.username || `Guest ${participant.peerId.slice(0, 6)}`,
-              username: participant.username || null,
-              isAdmin: Boolean(participant.isAdmin),
-        isModerator: Boolean(participant.isModerator),
-              adminMuted: Boolean(participant.adminMuted),
-            };
-          }
-
-          const device = new mediasoupClient.Device();
-          await device.load({
-            routerRtpCapabilities: response.rtpCapabilities,
-          });
-
-          if (!isCurrentSession(generation, socketId)) return;
-          deviceRef.current = device;
-
-          await createConsumerTransport(generation, socketId);
-          if (!isCurrentSession(generation, socketId)) return;
-
-          flushPendingProducerSignals();
-          await getLocalStream(generation, socketId);
-          if (!isCurrentSession(generation, socketId)) return;
-
-          requestExistingProducers();
-          flushPendingProducerSignals();
-
-          // Re-announce the local media state because a reconnect creates a
-          // brand-new server-side peer.
-          if (socketRef.current?.connected) {
-            socketRef.current.emit("audio-state", {
-              enabled: paramsRef.current.audioTrack?.enabled ?? true,
-            });
-            socketRef.current.emit("video-state", {
-              enabled: paramsRef.current.videoTrack?.enabled ?? true,
-            });
-          }
-        } catch (error) {
-          if (!isCurrentSession(generation, socketId)) return;
-          console.error("JOIN ROOM FAILED", error);
-          showMessage(error.message || "Could not join room");
-          cleanupMedia({ stopLocalTracks: false });
-          deviceRef.current = null;
-          setParticipants([]);
-        } finally {
-          if (connectionGenerationRef.current === generation) {
-            joinInProgressRef.current = false;
-          }
-        }
-      },
-    );
-  };
-
+  }, []);
   useEffect(() => {
-    if (sessionStatus === "loading") return;
+    if (!panel) return;
+    panelContainer.current?.querySelector("button")?.focus();
+    const escape = (event) => { if (event.key === "Escape") closePanel(); };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [panel, closePanel]);
+  const [workspaceToken, setWorkspaceToken] = useState(null);
+  const roomToken = live?.roomToken ?? null;
+  if (workspaceToken !== roomToken) {
+    setWorkspaceToken(roomToken);
+    setDraft(""); setPin(null); setPage(0); setLocalBoard(false); setHideBoard(false);
+  }
 
-    let cancelled = false;
-    let socket = null;
+  const localName = call.self?.name || session?.user?.displayName || session?.user?.name || "You";
+  const local = { ...call.self, name: localName + " (you)", userId, peerId: call.self?.peerId || "local",
+    videoEnabled: call.videoEnabled, audioEnabled: call.audioEnabled };
+  const people = [local, ...call.participants];
+  const cameras = new Map(call.remote.filter((item) => item.source === "camera").map((item) => [item.peerId, item.stream]));
+  if (call.camera) cameras.set(local.peerId, call.camera);
+  const sharing = call.remote.find((item) => item.source === "screen-video");
+  const display = call.display ? { person: local, stream: call.display } :
+    sharing && { person: people.find((person) => person.peerId === sharing.peerId), stream: sharing.stream };
+  const remoteAudio = useMemo(() => call.remote.filter((item) => item.source === "microphone" || item.source === "screen-audio"), [call.remote]);
+  const speech = useMemo(() => [...remoteAudio.map((item) => item.stream), ...(call.audioEnabled && call.mic ? [call.mic] : [])],
+    [remoteAudio, call.audioEnabled, call.mic]);
+  const selfMember = live?.members.find((member) => member.userId === userId);
+  const recordedAudio = useMemo(() => {
+    const displayAudio = call.display?.getAudioTracks().filter((track) => track.readyState === "live") || [];
+    return [...speech, ...(displayAudio.length && !live?.muted && !selfMember?.awaitingUnmute ? [new MediaStream(displayAudio)] : [])];
+  }, [speech, call.display, live?.muted, selfMember?.awaitingUnmute]);
 
-    const begin = async () => {
-      if (!session?.backendToken) {
-        router.replace(`/login?callbackUrl=${encodeURIComponent(`/room/${roomName}`)}`);
-        return;
-      }
+  const recorder = useRecorder(call.media, live?.features.recording, body, recordedAudio, notify);
+  const captions = useCaptions(call.media);
+  const files = useFiles(call.media, notify);
+  const background = useBackground(call.media, call.rawVideoTrack, call.replaceCamera, notify);
 
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || ""}/api/meetings/${roomName}`, {
-          headers: { Authorization: `Bearer ${session.backendToken}` },
-        });
+  const action = async (name, data) => {
+    try { await call.action(name, data); return true; }
+    catch (error) { notify(error.message); return false; }
+  };
+  const chat = async (event) => {
+    event.preventDefault();
+    if (!draft.trim() || live?.features.chat === false) return;
+    try { await call.ask("chat-message", { text: draft }); setDraft(""); }
+    catch (error) { notify(error.message); }
+  };
+  const admin = async (name, data) => {
+    try { await call.ask(name, data); } catch (error) { notify(error.message); }
+  };
+  const invite = async () => {
+    const url = new URL("/room/" + encodeURIComponent(meetingId), window.location.origin).href;
+    try {
+      if (navigator.share) await navigator.share({ title: "Join my Rauma meeting", url });
+      else { await navigator.clipboard.writeText(url); notify("Invite link copied."); }
+    } catch (error) { if (error.name !== "AbortError") notify("Could not share the invite link."); }
+  };
+  const copyCode = async () => {
+    try { await navigator.clipboard.writeText(meetingId); notify("Meeting code copied."); }
+    catch { notify("Could not copy the meeting code."); }
+  };
+  const tools = [
+    ["Chat", () => openPanel("chat")], ["Participants", () => openPanel("participants")],
+    ...(isHost ? [["Host settings", () => openPanel("settings")]] : []),
+    ["Screen sharing", () => openPanel("sharing")], ["Share invite link", invite],
+    ["Copy meeting code", copyCode],
+    ["Whiteboard", () => { setHideBoard(false); setLocalBoard(true); }], ["Raised hands", () => openPanel("hands")],
+    ["Local recording", () => openPanel("recording")], ["English captions", () => openPanel("captions")],
+    ["Camera background", () => openPanel("backgrounds")], ["Permissions", () => openPanel("permissions")],
+    ["Breakout rooms", () => openPanel("breakouts")],
+  ];
+  const end = live?.closingAt ?? (live?.roomId !== "main" || isHost ? live?.endsAt : null);
+  const boardVisible = live && (localBoard || (live.boardPresented && !hideBoard));
+  const board = boardVisible && <Whiteboard live={live} userId={userId} action={action} close={() => { setLocalBoard(false); setHideBoard(true); }} />;
 
-        if (response.ok) {
-          const meeting = await response.json();
-          if (!meeting.open) {
-            router.replace(`/waiting/${roomName}`);
-            return;
-          }
-        } else if (response.status !== 404) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || `Meeting check failed (${response.status}).`);
-        }
-      } catch (error) {
-        console.error("MEETING CHECK FAILED", error);
-        showMessage(error.message || "Could not check meeting.");
-        return;
-      }
-
-      if (cancelled) return;
-
-      mountedRef.current = true;
-      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "";
-      socket = io(`${socketUrl}/mediasoup`, {
-        path: "/socket.io",
-        reconnection: true,
-        auth: { token: session.backendToken },
-      });
-
-      socketRef.current = socket;
-
-    socket.on("connect", () => {
-      connectionGenerationRef.current += 1;
-      joinInProgressRef.current = false;
-
-      console.log("connected", socket.id);
-      setLocalPeerId(socket.id || null);
-      joinRoom();
-    });
-
-    socket.on("disconnect", (reason) => {
-      setLocalPeerId(null);
-      if (!mountedRef.current) return;
-
-      console.warn("SOCKET DISCONNECTED", reason);
-      connectionGenerationRef.current += 1;
-      joinInProgressRef.current = false;
-      deviceRef.current = null;
-      pendingProducerSignalsRef.current.clear();
-      closedProducerIdsRef.current.clear();
-
-      // Keep camera/microphone permission and tracks alive so a reconnect can
-      // reuse them without asking the user again. Recreate mediasoup transports
-      // when Socket.IO connects again.
-      cleanupMedia({ stopLocalTracks: false });
-      setRemoteStreams([]);
-      setParticipants([]);
-      setMessage("Connection lost. Reconnecting...");
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("SOCKET CONNECT ERROR", error);
-      showMessage("Server connection failed");
-    });
-
-    socket.on("new-producer", ({ producerId, peerId }) => {
-      signalNewConsumerTransport(producerId, peerId);
-    });
-
-    socket.on("producer-closed", ({ remoteProducerId }) => {
-      removeRemoteProducer(remoteProducerId);
-    });
-
-    socket.on("participant-joined", (participant) => {
-      upsertParticipant(participant);
-    });
-
-    socket.on("participant-left", ({ peerId }) => {
-      removeParticipant(peerId);
-
-      // Mark both active and pending media from this peer as closed. An
-      // in-flight consume will then discard its consumer when it resolves.
-      for (const [producerId, pendingPeerId] of pendingProducerSignalsRef.current) {
-        if (pendingPeerId === peerId) {
-          closedProducerIdsRef.current.add(producerId);
-          pendingProducerSignalsRef.current.delete(producerId);
-        }
-      }
-
-      for (const [producerId, data] of consumersRef.current.entries()) {
-        if (data.peerId === peerId) {
-          closedProducerIdsRef.current.add(producerId);
-          removeRemoteProducer(producerId);
-        }
-      }
-    });
-
-    socket.on("participant-state", (participant) => {
-      upsertParticipant(participant);
-      if (participant.peerId === socket.id) {
-        setLocalParticipantInfo((previous) => ({ ...(previous || {}), ...participant }));
-      }
-
-      setRemoteStreams((prev) =>
-        prev.map((item) =>
-          item.peerId === participant.peerId
-            ? {
-                ...item,
-                audioEnabled: participant.audioEnabled,
-                videoEnabled: participant.videoEnabled,
-              }
-            : item,
-        ),
-      );
-    });
-
-    socket.on("audio-state", ({ peerId, enabled, mutedByAdmin }) => {
-      upsertParticipant({
-        peerId,
-        audioEnabled: enabled,
-        adminMuted: Boolean(mutedByAdmin),
-      });
-
-      setRemoteStreams((prev) =>
-        prev.map((item) =>
-          item.peerId === peerId
-            ? { ...item, audioEnabled: enabled }
-            : item,
-        ),
-      );
-    });
-
-    socket.on("video-state", ({ peerId, enabled }) => {
-      upsertParticipant({
-        peerId,
-        videoEnabled: enabled,
-      });
-
-      setRemoteStreams((prev) =>
-        prev.map((item) =>
-          item.peerId === peerId
-            ? { ...item, videoEnabled: enabled }
-            : item,
-        ),
-      );
-    });
-
-    socket.on("chat-history", (messages) => {
-      setChatMessages(Array.isArray(messages) ? messages : []);
-    });
-
-    socket.on("chat-message", (chatMessage) => {
-      if (!chatMessage?.id) return;
-      setChatMessages((prev) => {
-        if (prev.some((item) => item.id === chatMessage.id)) return prev;
-        return [...prev, chatMessage].slice(-200);
-      });
-    });
-
-    socket.on("admin-audio-state", ({ enabled, mutedByAdmin }) => {
-      const track = paramsRef.current.audioTrack;
-      if (track) track.enabled = Boolean(enabled);
-      setAudioEnabled(Boolean(enabled));
-      setAdminMuted(Boolean(mutedByAdmin));
-      setLocalParticipantInfo((prev) => ({
-        ...(prev || {}),
-        peerId: socket.id,
-        audioEnabled: Boolean(enabled),
-        adminMuted: Boolean(mutedByAdmin),
-      }));
-      if (mutedByAdmin) showMessage("The admin muted your microphone.");
-      else showMessage("The admin allowed your microphone.");
-    });
-
-    socket.on("admin-removed", ({ reason }) => {
-      showMessage(reason || "You were removed from the meeting.");
-      socket.disconnect();
-      setTimeout(() => router.replace("/"), 250);
-    });
-
-    };
-
-    begin();
-
-    return () => {
-      cancelled = true;
-      mountedRef.current = false;
-      connectionGenerationRef.current += 1;
-      joinInProgressRef.current = false;
-      socket?.disconnect();
-      socket = null;
-      socketRef.current = null;
-      cleanupMedia({ stopLocalTracks: true });
-
-      participantStatesRef.current = {};
-      setLocalParticipantInfo(null);
-      setAdminMuted(false);
-      pendingProducerSignalsRef.current.clear();
-      closedProducerIdsRef.current.clear();
-      setRemoteStreams([]);
-      setParticipants([]);
-    };
-  }, [roomName, router, session?.backendToken, sessionStatus]);
-
-  return (
-    <main
-      className="
-        min-h-screen
-        h-screen
-        bg-[radial-gradient(ellipse_at_top,#edf5ff_0%,#f8fbff_42%,#ffffff_100%)]
-        text-[#172033]
-        flex
-        flex-col
-        overflow-hidden
-      "
-    >
-      <RoomHeader
-        roomName={roomName}
-        participantCount={participants.length + 1}
-        localName={localName}
-        localAvatarUrl={localAvatarUrl}
-        localIsAdmin={localIsAdmin}
-      />
-
-      <VideoGrid
-        remoteStreams={remoteStreams}
-        localVideoRef={localVideoRef}
-        audioEnabled={audioEnabled}
-        videoEnabled={videoEnabled}
-        participants={participants}
-        localName={localName}
-        localAvatarUrl={localAvatarUrl}
-        localIsAdmin={localIsAdmin}
-      />
-
-      <BottomControls
-        audioEnabled={audioEnabled}
-        videoEnabled={videoEnabled}
-        toggleAudio={toggleAudio}
-        toggleVideo={toggleVideo}
-        copyRoomCode={copyRoomCode}
-        shareRoom={shareRoom}
-        openPanel={openPanel}
-      />
-
-      <MeetingPanel
-        open={panelOpen}
-        tab={panelTab}
-        onTabChange={setPanelTab}
-        onClose={() => setPanelOpen(false)}
-        messages={chatMessages}
-        draft={chatDraft}
-        setDraft={setChatDraft}
-        onSendMessage={sendChatMessage}
-        participants={participants}
-        localPeerId={localPeerId}
-        localName={localName}
-        localAvatarUrl={localAvatarUrl}
-        isAdmin={localIsAdmin}
-        isHost={localIsHost}
-        isModerator={localIsModerator}
-        visibility={meetingVisibility}
-        onVisibilityChange={changeVisibility}
-        joinRequests={joinRequests}
-        onApproveRequest={resolveJoinRequest}
-        onPromoteModerator={toggleModerator}
-        onAdminMute={adminMuteParticipant}
-        onAdminRemove={adminRemoveParticipant}
-        adminBusyPeerId={adminBusyPeerId}
-      />
-
-      <ToastMessage message={message} />
-    </main>
-  );
+  return <main className="meeting-shell">
+    <RoomHeader roomName={meetingId} live={live} ready={Boolean(call.media)} participantCount={live ? people.length : 0}
+      fileOffer={files.state?.phase === "offer"} onFile={() => openPanel("files")} onRecording={() => openPanel("recording")}
+      onChat={() => openPanel("chat")} onPeople={() => openPanel("participants")} />
+    {end && <Countdown key={end} until={end} offset={live.clockOffset} breakout={live.roomId !== "main"} />}
+    {live?.notice && <p className="meeting-banner" role="status">Host notice · {live.notice.text}</p>}
+    {live?.muted && <p className="meeting-banner">Speaking is restricted by the host or a moderator.</p>}
+    {captions.status === "Captions unavailable" && panel !== "captions" && <p className="meeting-banner"><button onClick={() => openPanel("captions")}>{captions.status}</button></p>}
+    {recorder.output && panel !== "recording" && <p className="meeting-banner"><button onClick={() => openPanel("recording")}>Recording ready to save</button></p>}
+    <div className="meeting-body" ref={body}>
+      <VideoGrid people={people} cameras={cameras} screen={localBoard && board ? null : display} board={board} pinned={people.some((person) => person.userId === pin) ? pin : null}
+        setPin={setPin} spotlight={live?.spotlight} activeSpeaker={call.activeSpeaker} onSpotlight={isHost || isModerator ? (id) => action("spotlight", { userId: id }) : null}
+        page={page} setPage={setPage} />
+      <MeetingAudio items={remoteAudio} sink={output.output} onSinkError={output.unavailable} />
+      {captions.lines.length > 0 && <div className="meeting-indicator meeting-caption" aria-label="Meeting captions">
+        {captions.lines.map(([id, line]) => <p key={id} data-caption-final={line.final}><strong>{line.name}</strong> {line.text}</p>)}
+      </div>}
+      {call.reaction && <p aria-live="polite" className="meeting-indicator meeting-reaction-overlay">{call.reaction.emoji} {call.reaction.name}</p>}
+      {panel && <div className="contents" ref={panelContainer}>
+        {corePanels.includes(panel) ? <MeetingPanel open tab={panel} onTabChange={setPanel} onClose={closePanel}
+          participants={call.participants} messages={call.chat} draft={draft} setDraft={setDraft} onSendMessage={chat}
+          localPeerId={call.self?.peerId} localName={localName} localAvatarUrl={call.self?.avatarUrl}
+          isAdmin={isHost} isHost={isHost} isModerator={isModerator} onAttachment={() => setPanel("attach")}
+          canChat={live?.features.chat !== false} meetingConfiguration={isHost && panel === "settings" && <MeetingConfiguration
+            initial={{ ...(admission.configuration || emptyConfiguration()), defaults: live.defaults, overrides: live.overrides }}
+            participants={live.members} onSave={admission.saveConfiguration} />}
+          pollCards={live?.polls.length > 0 && <Polls live={live} action={action} />}
+          visibility={admission.meetingVisibility} onVisibilityChange={admission.changeVisibility}
+          joinRequests={admission.joinRequests} onApproveRequest={admission.resolveJoinRequest} onPromoteModerator={admission.toggleModerator}
+          onAdminMute={(targetPeerId, muted) => admin("admin-mute-participant", { targetPeerId, muted })}
+          onAdminRemove={(targetPeerId) => admin("admin-remove-participant", { targetPeerId })} />
+          : <aside className="meeting-panel" aria-label={titles[panel]}>
+            <div className="meeting-inline justify-between border-b border-[#dce6f2] px-3">
+              <h2 className="font-semibold">{titles[panel]}</h2>
+              <button aria-label="Close meeting panel" onClick={closePanel}>✕</button>
+            </div>
+            {!live ? <p className="p-3">Waiting for the meeting connection.</p> : <>
+              {panel === "attach" && <div className="meeting-tool">{["poll", "vote", "files"].map((type) => <button key={type} onClick={() => setPanel(type)}>{type === "files" ? "File" : type === "poll" ? "Poll" : "Vote"}</button>)}</div>}
+              {["poll", "vote"].includes(panel) && <Polls key={panel} type={panel} live={live} action={action} done={() => setPanel("chat")} />}
+              {panel === "files" && <Files files={files} live={live} people={people} userId={userId} action={action} />}
+              {panel === "recording" && <Recording recorder={recorder} live={live} action={action} />}
+              {panel === "backgrounds" && <Backgrounds effects={background} userId={userId} />}
+              {panel === "captions" && <section className="meeting-tool">
+                <p>The meeting server transcribes unmuted microphones in this room while viewers subscribe. Captions appear only for viewers who turn them on.</p>
+                {captions.status && <p role="status">{captions.status}</p>}
+                <button onClick={captions.toggle}>{captions.enabled ? "Turn captions off" : "Turn English captions on"}</button>
+              </section>}
+              {panel === "sharing" && <section className="meeting-tool">
+                <p>Your browser opens its tab, window, or screen picker. Available sources and audio depend on your browser and operating system.</p>
+                {call.display ? <>
+                  <button onClick={() => call.startScreen()}>Change shared source</button>
+                  <button onClick={() => call.stopScreen()}>Stop sharing screen</button>
+                </> : <button onClick={() => call.startScreen()} disabled={Boolean(live.presenter) || !live.features.screen}>Share screen</button>}
+                {isHost && live.presenter && <button onClick={() => action("stop-presentation")}>Stop room presentation</button>}
+              </section>}
+              {["permissions", "hands", "breakouts"].includes(panel) && <MeetingTools live={live} userId={userId} action={action} panel={panel} />}
+            </>}
+          </aside>}
+      </div>}
+    </div>
+    <BottomControls deviceProps={{ output, userId, notify }} openEffects={() => openPanel("backgrounds")} call={call} raised={Boolean(selfMember?.raisedAt)} menu={menu} setMenu={setMenu} action={action} tools={tools}
+      leave={async () => { await recorder.stop("left"); router.push("/"); }} />
+    {message && <div className="meeting-toast" role="status">{message}</div>}
+  </main>;
 }

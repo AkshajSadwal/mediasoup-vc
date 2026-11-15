@@ -2,14 +2,16 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { emptyConfiguration, teamForToken, validateConfiguration } from "./configuration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, "../../../data");
-const meetingsPath = path.join(dataDir, "meetings.json");
+const storePath = () => process.env.RAUMA_MEETINGS_FILE || path.join(dataDir, "meetings.json");
 
 const ensureStore = () => {
-  fs.mkdirSync(dataDir, { recursive: true });
+  const meetingsPath = storePath();
+  fs.mkdirSync(path.dirname(meetingsPath), { recursive: true });
   if (!fs.existsSync(meetingsPath)) fs.writeFileSync(meetingsPath, "[]\n", "utf8");
 };
 
@@ -24,12 +26,13 @@ const normalizeMeeting = (meeting) => ({
 
 const readMeetings = () => {
   ensureStore();
-  const parsed = JSON.parse(fs.readFileSync(meetingsPath, "utf8"));
+  const parsed = JSON.parse(fs.readFileSync(storePath(), "utf8"));
   return Array.isArray(parsed) ? parsed.map(normalizeMeeting) : [];
 };
 
 const writeMeetings = (meetings) => {
   ensureStore();
+  const meetingsPath = storePath();
   const tempPath = `${meetingsPath}.tmp`;
   fs.writeFileSync(tempPath, `${JSON.stringify(meetings, null, 2)}\n`, "utf8");
   fs.renameSync(tempPath, meetingsPath);
@@ -68,7 +71,7 @@ export const getMeeting = (roomId) => {
 
 export const listMeetingsForUser = (userId) =>
   readMeetings()
-    .filter((meeting) => meeting.status !== "cancelled" && (meeting.hostUserId === userId || meeting.attendeeUserIds.includes(userId)))
+    .filter((meeting) => !meeting.adoptedRoom && meeting.status !== "cancelled" && (meeting.hostUserId === userId || meeting.attendeeUserIds.includes(userId)))
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
 
 export const addMeetingToCalendar = (roomId, userId) => {
@@ -166,3 +169,72 @@ export const setMeetingModerator = (roomId, hostUserId, targetUserId, enabled) =
   if (enabled && !meeting.moderatorUserIds.includes(targetUserId)) meeting.moderatorUserIds.push(targetUserId);
   if (!enabled) meeting.moderatorUserIds = meeting.moderatorUserIds.filter((id) => id !== targetUserId);
 });
+
+export function createConfiguredMeeting({ hostUserId, hostName, title, visibility, config }) {
+  const { configuration, links } = validateConfiguration(config, [], true);
+  const meeting = normalizeMeeting({
+    roomId: crypto.randomUUID(), hostUserId, hostName,
+    title: String(title || "Rauma Meeting").trim().slice(0, 120) || "Rauma Meeting",
+    visibility, status: "configured", scheduledAt: null, startedAt: null,
+    createdAt: new Date().toISOString(), configuration, teamMembers: [],
+  });
+  writeMeetings([...readMeetings(), meeting]);
+  return { meeting, links };
+}
+
+export const updateMeetingConfiguration = (roomId, userId, config) => updateMeeting(roomId, (meeting) => {
+  if (meeting.hostUserId !== userId) throw new Error("Only the meeting host can change meeting settings.");
+  meeting.configuration = validateConfiguration(config, meeting.configuration?.teams).configuration;
+});
+
+export const saveLivePolicy = (roomId, userId, defaults, overrides) => updateMeeting(roomId, (meeting) => {
+  if (meeting.hostUserId !== userId) throw new Error("Only the meeting host can change meeting settings.");
+  meeting.configuration = { ...(meeting.configuration ?? emptyConfiguration()), defaults, overrides };
+});
+
+export function saveBreakoutSession(roomId, hostUserId, breakoutSession) {
+  const meetings = readMeetings();
+  let meeting = meetings.find((entry) => entry.roomId === roomId);
+  if (!meeting) {
+    meeting = normalizeMeeting({ roomId, hostUserId, title: "Rauma Meeting", status: "live", adoptedRoom: true });
+    meetings.push(meeting);
+  }
+  if (meeting.hostUserId !== hostUserId) throw new Error("Only the meeting host can manage breakouts.");
+  meeting.breakoutSession = breakoutSession;
+  writeMeetings(meetings);
+}
+
+export function admitTeam(roomId, account, token) {
+  const saved = getMeeting(roomId);
+  if (!saved || !isMeetingOpen(saved) || !canJoinMeeting(saved, account)) throw new Error("JOIN_APPROVAL_REQUIRED");
+  const assigned = saved.teamMembers?.find((entry) => entry.userId === account);
+  const requested = token ? teamForToken(saved.configuration, token) : null;
+  if (!requested) return saved.configuration?.teams.find((team) => team.id === assigned?.teamId);
+  if (requested.id === assigned?.teamId) return requested;
+  if (!assigned && (saved.teamMembers?.length ?? 0) >= 1000) throw new Error("The meeting team member limit was reached.");
+  updateMeeting(roomId, (meeting) => {
+    meeting.teamMembers = (meeting.teamMembers || []).filter(({ userId }) => userId !== account);
+    meeting.teamMembers.push({ userId: account, teamId: requested.id });
+  });
+  return requested;
+}
+export function reconcileStoredBreakouts(now = Date.now()) {
+  const meetings = readMeetings();
+  let changed = false;
+  for (const meeting of meetings) {
+    const session = meeting.breakoutSession;
+    if (!session) continue;
+    if (session.endsAt <= now) {
+      meeting.breakoutSession = null;
+      changed = true;
+      continue;
+    }
+    const rooms = session.rooms.filter(({ closingAt }) => !closingAt || closingAt > now);
+    if (rooms.length === session.rooms.length) continue;
+    const remaining = new Set(rooms.map(({ id }) => id));
+    meeting.breakoutSession = rooms.length ? { ...session, rooms,
+      assignments: Object.fromEntries(Object.entries(session.assignments).filter(([, id]) => id === "main" || remaining.has(id))) } : null;
+    changed = true;
+  }
+  if (changed) writeMeetings(meetings);
+}

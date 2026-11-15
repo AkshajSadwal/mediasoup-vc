@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Crown, MessageCircle, MicOff, Send, Users, Volume2, UserX, X, Settings, ShieldCheck, Check, Lock, Globe } from "lucide-react";
+import { Crown, MessageCircle, MicOff, Send, Users, Volume2, UserX, X, Settings, ShieldCheck, Check, Lock, Globe, Paperclip } from "lucide-react";
 
 export default function MeetingPanel({
   open,
@@ -27,6 +27,7 @@ export default function MeetingPanel({
   joinRequests = [],
   onApproveRequest,
   onPromoteModerator,
+  onAttachment, pollCards, canChat = true, meetingConfiguration,
 }) {
   const messageEndRef = useRef(null);
 
@@ -37,13 +38,13 @@ export default function MeetingPanel({
   if (!open) return null;
 
   return (
-    <aside className="fixed right-0 top-20 bottom-0 z-40 flex w-full max-w-md flex-col border-l border-[#dce6f2] bg-white/95 backdrop-blur-2xl shadow-2xl">
+    <aside className="meeting-panel" aria-label="Meeting panel">
       <div className="flex items-center justify-between border-b border-[#dce6f2] px-5 py-4">
         <div>
           <div className="font-semibold">Meeting</div>
           <div className="text-xs text-[#8795a8]">{participants.length + 1} participant{participants.length + 1 === 1 ? "" : "s"}</div>
         </div>
-        <button onClick={onClose} className="rounded-lg p-2 text-[#64748b] hover:bg-white hover:text-[#172033]"><X size={18} /></button>
+        <button onClick={onClose} aria-label="Close meeting panel" className="rounded-lg p-2 text-[#64748b] hover:bg-white hover:text-[#172033]"><X size={18} /></button>
       </div>
 
       <div className="flex border-b border-[#dce6f2]">
@@ -66,12 +67,14 @@ export default function MeetingPanel({
                 <div className={`rounded-2xl px-4 py-3 text-sm ${message.peerId === localPeerId ? "bg-[#e8f1ff]" : "bg-white"}`}>{message.text}</div>
               </div>
             ))}
+            {pollCards}
             <div ref={messageEndRef} />
           </div>
           <form onSubmit={onSendMessage} className="border-t border-[#dce6f2] p-4">
             <div className="flex items-center gap-2 rounded-2xl border border-[#dce6f2] bg-[#f4f8fd] p-2">
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={1000} placeholder="Type a message..." className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[#172033]/30" />
-              <button disabled={!draft.trim()} className="grid h-10 w-10 place-items-center rounded-xl bg-[#176df3] text-white disabled:opacity-40"><Send size={17} /></button>
+              <button type="button" onClick={onAttachment} aria-label="Attach poll, vote or file"><Paperclip size={18} className="mx-auto" /></button>
+              <input aria-label="Chat message" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={!canChat} maxLength={1000} placeholder={canChat ? "Type a message..." : "The host has disabled sending chat."} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[#172033]/30" />
+              <button aria-label="Send message" disabled={!draft.trim() || !canChat} className="grid h-10 w-10 place-items-center rounded-xl bg-[#176df3] text-white disabled:opacity-40"><Send size={17} /></button>
             </div>
           </form>
         </div>
@@ -96,6 +99,7 @@ export default function MeetingPanel({
         </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
+          {isHost && meetingConfiguration}
           {isHost && <section className="rounded-2xl border border-[#dce6f2] bg-[#f7faff] p-4">
             <h3 className="font-semibold text-[#172033]">Meeting access</h3>
             <p className="mt-1 text-sm text-[#718096]">Choose who can enter this meeting.</p>
@@ -137,4 +141,3 @@ function ParticipantRow({ participant, local, admin, isHost, busy, onMute, onRem
     </div>
   );
 }
-

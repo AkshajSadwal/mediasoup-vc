@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarClock, Link2, Video, X } from "lucide-react";
 
-export default function MeetingActionModal({ mode = "create", onClose, onCreateInstant, onSchedule, onJoin }) {
+export default function MeetingActionModal({ mode = "create", onClose, onCreateInstant, onSchedule, onJoin, onConfigure }) {
   const [activeMode, setActiveMode] = useState(mode === "join" ? "join" : "create");
   const [activeCreateMode, setActiveCreateMode] = useState("instant");
   const [title, setTitle] = useState("Rauma Meeting");
@@ -73,9 +73,10 @@ export default function MeetingActionModal({ mode = "create", onClose, onCreateI
             </form>
           ) : (
             <form onSubmit={submit} className="space-y-5">
-              <div className="grid grid-cols-2 gap-2 rounded-[14px] bg-[#f0f4f9] p-1">
+              <div className="grid grid-cols-3 gap-1 rounded-[14px] bg-[#f0f4f9] p-1">
                 <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("instant"); setError(""); }} className={`rounded-[11px] px-4 py-2.5 text-[13px] font-semibold transition ${activeCreateMode === "instant" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Instant meeting</button>
                 <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("schedule"); setError(""); }} className={`rounded-[11px] px-4 py-2.5 text-[13px] font-semibold transition ${activeCreateMode === "schedule" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Schedule meeting</button>
+                <button type="button" onClick={onConfigure} className="min-h-11 rounded-[11px] px-2 py-2 text-[13px] font-semibold text-[#176df3]">Config meeting</button>
               </div>
 
               {activeCreateMode === "instant" ? (

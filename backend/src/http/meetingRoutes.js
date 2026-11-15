@@ -12,10 +12,15 @@ import {
   requestMeetingAccess,
   approveMeetingRequest,
   setMeetingModerator,
+  createConfiguredMeeting,
+  updateMeetingConfiguration,
+  saveBreakoutSession,
 } from "../meetings/meetingStore.js";
+import { publicConfiguration, validateConfiguration } from "../meetings/configuration.js";
 import { requireAuth } from "./authMiddleware.js";
-import { getRoom } from "../mediasoup/rooms/roomManager.js";
-import { getPeer } from "../mediasoup/peers/peerManager.js";
+import { applyConfiguration, findLiveMeeting, role } from "../live/state.js";
+import { publish, reevaluate } from "../live/controller.js";
+import { participantState } from "../socket/events/room.events.js";
 
 const router = express.Router();
 
@@ -32,7 +37,18 @@ const publicMeeting = (meeting, userId = null) => ({
   visibility: meeting.visibility || "public",
   isModerator: Boolean(userId && meeting.moderatorUserIds?.includes(userId)),
   canJoin: canJoinMeeting(meeting, userId),
+  configuration: userId === meeting.hostUserId ? publicConfiguration(meeting.configuration) : undefined,
   joinRequests: Boolean(userId && (userId === meeting.hostUserId || meeting.moderatorUserIds?.includes(userId))) ? meeting.joinRequests || [] : undefined,
+});
+
+router.post("/config", requireAuth, (req, res) => {
+  try {
+    const { meeting, links } = createConfiguredMeeting({
+      hostUserId: req.user.id, hostName: req.user.displayName || req.user.username,
+      title: req.body?.title, visibility: req.body?.visibility, config: req.body?.configuration,
+    });
+    res.set("Cache-Control", "no-store").status(201).json({ ...publicMeeting(meeting, req.user.id), links });
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
 router.post("/", requireAuth, (req, res) => {
@@ -83,6 +99,36 @@ router.patch("/:roomId/settings", requireAuth, (req, res) => {
   } catch (error) { res.status(403).json({ error: error.message }); }
 });
 
+router.patch("/:roomId/config", requireAuth, (req, res) => {
+  try {
+    const live = findLiveMeeting(req.params.roomId);
+    if (!getMeeting(req.params.roomId) && live?.hostId === req.user.id) {
+      validateConfiguration(req.body?.configuration);
+      saveBreakoutSession(live.id, live.hostId, null);
+    }
+    const meeting = updateMeetingConfiguration(req.params.roomId, req.user.id, req.body?.configuration);
+    if (live) {
+      live.saved = true;
+      applyConfiguration(live, meeting.configuration);
+      for (const member of live.members.values()) {
+        const peer = member.peer;
+        const team = live.teams.find(({ id }) => id === member.teamId);
+        if (!team) continue;
+        member.name = team.name;
+        if (peer?.ready) {
+          peer.displayName = team.name;
+          const state = participantState(peer.socket.id);
+          peer.socket.emit("participant-state", state);
+          peer.socket.to(peer.roomName).emit("participant-state", state);
+        }
+      }
+      reevaluate(live);
+      publish(live);
+    }
+    res.json(publicMeeting(meeting, req.user.id));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 router.post("/:roomId/requests/:targetUserId", requireAuth, (req, res) => {
   try {
     const approved = req.body?.approved === true;
@@ -94,17 +140,20 @@ router.post("/:roomId/requests/:targetUserId", requireAuth, (req, res) => {
 router.post("/:roomId/moderators/:targetUserId", requireAuth, (req, res) => {
   try {
     const enabled = req.body?.enabled === true;
-    const room = getRoom(req.params.roomId);
-    const targetIsPresent = (room?.peers || []).some((peerId) => getPeer(peerId)?.userId === req.params.targetUserId);
-    if (enabled && !targetIsPresent) return res.status(400).json({ error: "The participant must be in the meeting before becoming a moderator." });
+    const live = findLiveMeeting(req.params.roomId);
+    const member = live?.members.get(req.params.targetUserId);
+    const peer = member?.peer;
+    if (enabled && !peer?.ready) return res.status(400).json({ error: "The participant must be in the meeting before becoming a moderator." });
     const meeting = setMeetingModerator(req.params.roomId, req.user.id, req.params.targetUserId, enabled);
-    for (const peerId of room?.peers || []) {
-      const peer = getPeer(peerId);
-      if (!peer || peer.userId !== req.params.targetUserId) continue;
+    if (member) member.lastRole = enabled ? "moderator" : "participant";
+    if (peer) {
       peer.isModerator = enabled;
-      const payload = { peerId, userId: peer.userId, username: peer.username, name: peer.displayName, audioEnabled: peer.audioEnabled, videoEnabled: peer.videoEnabled, connected: true, isAdmin: peer.isAdmin, isModerator: peer.isModerator, adminMuted: peer.forcedAudioMuted };
-      peer.socket.emit("participant-state", payload);
-      peer.socket.to(req.params.roomId).emit("participant-state", payload);
+      member.lastRole = role(peer);
+      if (peer.ready) {
+        peer.socket.to(peer.roomName).emit("participant-state", participantState(peer.socket.id));
+        reevaluate(live);
+        publish(live);
+      }
     }
     res.json(publicMeeting(meeting, req.user.id));
   } catch (error) { res.status(403).json({ error: error.message }); }

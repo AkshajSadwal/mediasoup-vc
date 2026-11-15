@@ -1,127 +1,40 @@
-import {
-  joinRoom,
-  audioState,
-  videoState,
-} from "./events/room.events.js";
-
-import {
-  createTransportHandler,
-  transportConnect,
-  transportRecvConnect,
-} from "./events/transport.events.js";
-
-import {
-  transportProduce,
-  getProducersHandler,
-} from "./events/producer.events.js";
-
-import {
-  consumeHandler,
-  consumerResume,
-} from "./events/consumer.events.js";
-
-import { removeConsumers } from "../mediasoup/consumers/consumerManager.js";
-import { removeProducers } from "../mediasoup/producers/producerManager.js";
-import { removeTransports } from "../mediasoup/transports/transportManager.js";
-import {
-  getPeer,
-  deletePeer,
-} from "../mediasoup/peers/peerManager.js";
-import { removePeerFromRoom } from "../mediasoup/rooms/roomManager.js";
-import { getChatHistory, sendChatMessage } from "./events/chat.events.js";
+import { joinRoom, disconnectPeer, mountedPeer, audioState, videoState, liveAction, liveSnapshot, readyToMove } from "./events/room.events.js";
+import { createTransportHandler, restartIce, transportConnect } from "./events/transport.events.js";
+import { transportProduce, producerClose, getProducersHandler } from "./events/producer.events.js";
+import { consumeHandler, consumerResume } from "./events/consumer.events.js";
+import { sendChatMessage } from "./events/chat.events.js";
 import { adminSetAudioMuted, adminRemoveParticipant } from "./events/admin.events.js";
+import { rate } from "../live/state.js";
 
-const registerSocketHandlers = (socket) => {
-  console.log("connected:", socket.id);
+import { subscribeCaptions } from "../live/captions.js";
+import { fileSignal } from "../live/files.js";
 
-  socket.emit("connection-success", {
-    socketId: socket.id,
-  });
-
-  socket.on("joinRoom", (data, callback) =>
-    joinRoom(socket, data, callback),
-  );
-
-  socket.on(
-    "createWebRtcTransport",
-    (data, callback) =>
-      createTransportHandler(socket, data, callback),
-  );
-
-  socket.on("transport-connect", (data, callback) =>
-    transportConnect(socket, data, callback),
-  );
-
-  socket.on(
-    "transport-produce",
-    (data, callback) =>
-      transportProduce(socket, data, callback),
-  );
-
-  socket.on("getProducers", (callback) =>
-    getProducersHandler(socket, callback),
-  );
-
-  socket.on(
-    "transport-recv-connect",
-    (data, callback) =>
-      transportRecvConnect(socket, data, callback),
-  );
-
-  socket.on("consume", (data, callback) =>
-    consumeHandler(socket, data, callback),
-  );
-
-  socket.on("consumer-resume", (data) =>
-    consumerResume(socket, data),
-  );
-
-  socket.on("audio-state", (data) =>
-    audioState(socket, data),
-  );
-
-  socket.on("video-state", (data) =>
-    videoState(socket, data),
-  );
-
-  socket.on("get-chat-history", (callback) =>
-    getChatHistory(socket, callback),
-  );
-
-  socket.on("chat-message", (data, callback) =>
-    sendChatMessage(socket, data, callback),
-  );
-
-  socket.on("admin-mute-participant", (data, callback) =>
-    adminSetAudioMuted(socket, data, callback),
-  );
-
-  socket.on("admin-remove-participant", (data, callback) =>
-    adminRemoveParticipant(socket, data, callback),
-  );
-
-  socket.on("disconnect", () => {
-    console.log("peer disconnected", socket.id);
-
-    const peer = getPeer(socket.id);
-    const roomName = peer?.roomName || socket.roomName;
-
-    if (roomName) {
-      socket.to(roomName).emit("participant-left", {
-        peerId: socket.id,
-      });
-      removePeerFromRoom(roomName, socket.id);
-    }
-
-    // Close mediasoup resources before removing the peer record.
-    removeConsumers(socket.id);
-    removeProducers(socket.id);
-    removeTransports(socket.id);
-
-    if (peer) {
-      deletePeer(socket.id);
-    }
-  });
-};
-
-export default registerSocketHandlers;
+export default function registerSocketHandlers(socket) {
+  const events = {
+    "caption-subscribe": async (s, data, cb) => { await subscribeCaptions(mountedPeer(s, data), data); cb({ ok: true }); },
+    joinRoom, "room-move-ready": readyToMove, "createWebRtcTransport": createTransportHandler, "restart-ice": restartIce,
+    "transport-connect": (s, d, cb) => transportConnect(s, d, cb, false),
+    "transport-recv-connect": (s, d, cb) => transportConnect(s, d, cb, true),
+    "transport-produce": transportProduce, "producer-close": producerClose, getProducers: getProducersHandler,
+    consume: consumeHandler, "consumer-resume": consumerResume,
+    "audio-state": audioState, "video-state": videoState, "live-action": liveAction, "live-snapshot": liveSnapshot,
+    "chat-message": sendChatMessage, "admin-mute-participant": adminSetAudioMuted, "admin-remove-participant": adminRemoveParticipant,
+  };
+  for (const action of ["offer", "accept", "produce", "consume", "ready", "credit", "cancel"]) {
+    events["file-" + action] = (s, d, cb) => fileSignal(s, d, cb, action);
+  }
+  for (const [event, handler] of Object.entries(events)) {
+    socket.on(event, async (data, callback) => {
+      if (typeof callback !== "function") return;
+      try {
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid request.");
+        if (event === "joinRoom") rate(socket, "join", 12);
+        else if (event !== "file-credit") rate(mountedPeer(socket, data), "signaling", 300);
+        await handler(socket, data, callback);
+      } catch (error) {
+        callback({ error: error.message || "Meeting request failed." });
+      }
+    });
+  }
+  socket.on("disconnect", () => disconnectPeer(socket));
+}
