@@ -1,42 +1,44 @@
 "use client";
 
-import { CalendarDays, ChevronRight, Link2, Mic, MoreHorizontal, MonitorUp, Video } from "lucide-react";
+import { ArrowUpRight, CalendarPlus, Hand, Link2, Mic, MonitorUp, MoreHorizontal, Video } from "lucide-react";
 
-function Avatar({ tone = "blue", label }) {
-  const styles = { blue: "bg-[#dfeaff] text-[#4f74df]", purple: "bg-[#eee5ff] text-[#8a5cf1]", green: "bg-[#dff5e5] text-[#2aa55b]" };
-  return <span className={`grid h-7 w-7 place-items-center rounded-full text-[10px] font-semibold ${styles[tone]}`}>{label}</span>;
-}
+const guests = [
+  { initials: "AL", name: "Alex Morgan", color: "from-[#fbb49d] to-[#d96e80]", label: "AM" },
+  { initials: "JD", name: "Jordan Davis", color: "from-[#b0a1ff] to-[#6665cd]", label: "JD" },
+  { initials: "SK", name: "Sam Kim", color: "from-[#8ddcd4] to-[#328f99]", label: "SK" },
+];
 
 export default function MeetingHeroVisual({ onAddMeeting }) {
   return (
-    <div className="relative mx-auto hidden h-[520px] w-full max-w-[760px] lg:block select-none caret-transparent">
-      <svg className="absolute left-[8%] top-[10%] h-[360px] w-[560px]" viewBox="0 0 560 360" fill="none" aria-hidden="true">
-        <path d="M20 266C96 226 92 190 166 134C214 98 271 108 305 63C329 31 315 7 297 12" stroke="#9AB7F7" strokeWidth="3" strokeLinecap="round" />
-        <path d="M292 12C327 2 350 15 369 44C392 79 427 78 482 50" stroke="#9AB7F7" strokeWidth="3" strokeLinecap="round" />
-        <path d="M406 310C446 280 450 242 492 219C528 199 548 206 552 183" stroke="#9AB7F7" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-
-      <div className="absolute right-[6%] top-[7%] w-[590px] rotate-[4deg] rounded-[18px] border border-[#dfe7f0] bg-white/95 p-3 shadow-[0_30px_70px_rgba(39,67,112,0.16)]">
-        <div className="flex items-center justify-between px-2 pb-3"><div className="flex items-center gap-2 text-[#17212c]"><span className="grid h-7 w-7 place-items-center rounded-[8px] bg-[#e7f0ff] text-[#176bf2]"><Video className="h-4 w-4" /></span><span className="text-[13px] font-semibold">Rauma</span></div><div className="flex items-center gap-2"><div className="h-2.5 w-2.5 rounded-full bg-[#1774f5]" /><div className="h-2.5 w-2.5 rounded-full bg-[#d9e0ea]" /></div></div>
-        <div className="grid grid-cols-[110px_1fr] overflow-hidden rounded-[13px] border border-[#e8edf3] bg-white">
-          <aside className="border-r border-[#e8edf3] bg-[#fbfdff] p-3"><div className="space-y-1.5 text-[10px] text-[#536071]"><div className="rounded-[9px] bg-[#e9f3ff] px-3 py-2 font-semibold text-[#1268ef]">Meetings</div><div className="px-3 py-2">Calendar</div><div className="px-3 py-2">Rooms</div></div></aside>
-          <div className="p-4"><div className="flex items-center justify-between"><h3 className="text-[16px] font-semibold text-[#0f1720]">September 2026</h3><span className="rounded-full bg-[#f4f7fb] px-3 py-1.5 text-[9px] font-medium text-[#667085]">Today</span></div>
-            <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[9px] text-[#6b7280]">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day, index) => <div key={day} className={`rounded-[8px] px-1 py-2 ${index === 4 ? "bg-[#e8f2ff] text-[#0b6bf0]" : ""}`}><div>{day}</div><div className="mt-1 text-[13px] font-semibold text-inherit">{21 + index}</div></div>)}</div>
-            <div className="mt-4 space-y-2">{[["Project Discussion","10:00 AM – 10:30 AM","blue"],["Design Review","12:00 PM – 1:00 PM","green"],["Team Sync","4:00 PM – 4:30 PM","purple"]].map(([title, time, tone]) => <div key={title} className="grid grid-cols-[1fr_auto] items-center rounded-[11px] border border-[#edf1f6] px-3 py-2.5"><div className="flex items-center gap-2.5"><span className={`grid h-8 w-8 place-items-center rounded-[9px] ${tone === "blue" ? "bg-[#e7f0ff] text-[#1d6cf4]" : tone === "green" ? "bg-[#e6f7eb] text-[#1ea760]" : "bg-[#eee7ff] text-[#7b55eb]"}`}><Video className="h-4 w-4" strokeWidth={1.8} /></span><div><div className="text-[10px] font-semibold text-[#111827]">{title}</div><div className="text-[8px] text-[#7b8794]">{time}</div></div></div><div className="flex items-center gap-2"><div className="flex -space-x-1.5"><Avatar label="A" tone="blue" /><Avatar label="R" tone="green" /><Avatar label="D" tone="purple" /></div><span className="rounded-[9px] bg-[#146df2] px-3 py-1.5 text-[8px] font-semibold text-white">Join</span></div></div>)}</div>
+    <div className="hero-visual relative mx-auto flex w-full max-w-[650px] items-center justify-center py-3 lg:py-14" aria-label="Illustration of a Rauma video call">
+      <div className="pointer-events-none absolute inset-[10%] rounded-full bg-[#e0e6ff] blur-[70px]" />
+      <div className="relative w-full max-w-[590px] rounded-[30px] border border-[#25314c] bg-[#10192e] p-3.5 shadow-[0_35px_100px_rgba(32,49,111,.24)] sm:p-5">
+        <div className="flex items-center justify-between gap-3 px-1 pb-4 text-white">
+          <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#526bfa]"><Video size={18} /></span><div><p className="text-[13px] font-semibold tracking-[-.02em]">Design catch-up</p><p className="text-[10px] text-[#8798b4]">Rauma meeting preview</p></div></div>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-medium text-[#bac6db]">3 participants</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          <div className="relative col-span-2 flex h-[170px] items-center justify-center overflow-hidden rounded-[19px] bg-gradient-to-br from-[#283b66] via-[#273656] to-[#182543] sm:h-[215px]">
+            <div className="absolute -right-14 -top-24 h-60 w-60 rounded-full border-[32px] border-white/5" />
+            <div className="relative grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[#fea68c] to-[#b55d6b] text-[27px] font-bold text-white shadow-[0_12px_35px_rgba(0,0,0,.2)] sm:h-24 sm:w-24">AL</div>
+            <span className="absolute bottom-3 left-3 rounded-lg bg-[#0c1325]/70 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">Alex Morgan · host</span>
+            <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-[#203b49] px-2.5 py-1 text-[9px] font-medium text-[#8de4ce]"><span className="h-1.5 w-1.5 rounded-full bg-[#51d6ad]" /> Live</span>
+          </div>
+          {guests.slice(1).map((guest) => <div key={guest.name} className="relative flex h-[119px] items-center justify-center overflow-hidden rounded-[18px] bg-gradient-to-br from-[#263450] to-[#19263f] sm:h-[151px]"><div className={`grid h-[62px] w-[62px] place-items-center rounded-full bg-gradient-to-br ${guest.color} text-[19px] font-bold text-white shadow-lg sm:h-[78px] sm:w-[78px]`}>{guest.initials}</div><span className="absolute bottom-2 left-2 rounded-md bg-[#0c1325]/65 px-2 py-1 text-[10px] text-white">{guest.name}</span></div>)}
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/[.09] pt-4">
+          <span className="hidden text-[10px] text-[#8fa0bf] sm:inline">Create. Connect. Collaborate.</span>
+          <div className="mx-auto flex items-center gap-2 sm:mx-0">
+            {[Mic, Video, Hand, MonitorUp, MoreHorizontal].map((Icon, i) => <span key={i} className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/[.09] text-[#dde7fa] sm:h-10 sm:w-10"><Icon size={16} /></span>)}
+            <span className="grid h-9 w-12 place-items-center rounded-xl bg-[#e75466] text-white sm:h-10"><Video size={17} /></span>
           </div>
         </div>
       </div>
-
-      <div className="absolute left-[6%] top-[34%] w-[420px] -rotate-[6deg] rounded-[18px] border border-[#dbe5f0] bg-white p-3 shadow-[0_26px_56px_rgba(37,65,107,0.16)]">
-        <div className="flex items-center gap-2 px-2 pb-2"><span className="grid h-7 w-7 place-items-center rounded-[8px] bg-[#e7f0ff] text-[#176bf2]"><Video className="h-4 w-4" /></span><span className="text-[12px] font-semibold text-[#19232f]">Rauma</span></div>
-        <div className="rounded-[13px] bg-[#081625] p-2.5"><div className="grid grid-cols-2 gap-2"><div className="flex h-[140px] items-end rounded-[11px] bg-gradient-to-br from-[#1f3655] to-[#172b42] p-2.5"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#4d70d3] text-[12px] font-semibold text-white">D</span></div><div className="flex h-[140px] items-end rounded-[11px] bg-gradient-to-br from-[#25394f] to-[#152337] p-2.5"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#5a8bcf] text-[12px] font-semibold text-white">A</span></div></div><div className="mt-2 flex justify-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><Mic className="h-3.5 w-3.5" /></span><span className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><Video className="h-3.5 w-3.5" /></span><span className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><MonitorUp className="h-3.5 w-3.5" /></span><span className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><MoreHorizontal className="h-3.5 w-3.5" /></span><span className="grid h-8 w-8 place-items-center rounded-full bg-[#f34d52] text-white">×</span></div></div>
-      </div>
-
-      <button type="button" onClick={onAddMeeting} className="absolute bottom-[8%] right-[4%] flex w-[300px] items-center justify-between rounded-[16px] border border-[#e3eaf4] bg-white px-5 py-4 text-left shadow-[0_18px_42px_rgba(35,57,94,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(35,57,94,0.16)]">
-        <div className="flex items-center gap-3.5"><span className="grid h-12 w-12 place-items-center rounded-[13px] bg-[#eaf3ff] text-[#1a6ef3]"><CalendarDays className="h-6 w-6" strokeWidth={1.8} /></span><div><div className="text-[14px] font-semibold text-[#10161f]">Add meeting</div><div className="mt-1 text-[12px] text-[#65707f]">Add to your calendar</div></div></div>
-        <ChevronRight className="h-5 w-5 text-[#6f7a8a]" />
+      <button type="button" onClick={onAddMeeting} className="absolute -bottom-3 right-1 flex items-center gap-3 rounded-[18px] border border-[#e6eaff] bg-white px-4 py-3 text-left shadow-[0_20px_45px_rgba(42,60,109,.14)] transition hover:-translate-y-1 hover:shadow-[0_25px_55px_rgba(42,60,109,.19)] sm:bottom-4 sm:-right-4 sm:px-5 sm:py-4">
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e8edff] text-[#526bf6]"><CalendarPlus size={20} /></span>
+        <span><span className="block text-[12px] font-bold text-[#17203c] sm:text-[13px]">Add to calendar</span><span className="mt-1 block text-[10px] text-[#8590a6]">Keep your meetings close</span></span><ArrowUpRight size={17} className="text-[#64749a]" />
       </button>
-      <div className="absolute bottom-0 left-[31%] hidden rounded-full border border-[#e4eaf2] bg-white/90 px-3.5 py-2 text-[10px] font-medium text-[#4b5563] shadow-sm xl:flex xl:items-center xl:gap-2"><Link2 className="h-3.5 w-3.5 text-[#1d6cf4]" />Meet from anywhere</div>
+      <span className="absolute -left-2 top-7 hidden rotate-[-8deg] items-center gap-2 rounded-full border border-[#e4e9f7] bg-white px-4 py-2 text-[11px] font-semibold text-[#5f6c89] shadow-[0_12px_30px_rgba(37,50,96,.1)] sm:flex"><Link2 size={14} className="text-[#536cf6]" /> One link. Everyone together.</span>
     </div>
   );
 }

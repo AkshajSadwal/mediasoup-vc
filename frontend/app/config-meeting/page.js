@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import MeetingConfiguration from "@/components/room/MeetingConfiguration";
+import { rememberTeamLink } from "@/components/room/TeamLinks";
 import "@/components/room/meeting.css";
 
-const backend = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const backend = "";
 
 export default function ConfigureMeeting() {
   const { data: session, status } = useSession();
@@ -28,11 +29,14 @@ export default function ConfigureMeeting() {
     return result;
   };
   return <main className="config-page">
-    <Link href="/">Rauma home</Link>
-    <h1>Config meeting</h1>
+    <Link href="/">← Back to Rauma</Link>
+    <p className="mt-5 text-[11px] font-bold uppercase tracking-[.16em] text-[#526bf6]">Advanced meeting setup</p>
+    <h1>Build your meeting room.</h1>
+    <p className="mb-7 max-w-2xl text-[14px] leading-6 text-[#7b889f]">Set permissions, define teams, and tailor your meeting experience before you invite anyone.</p>
     {session?.backendToken && (!saved ? <MeetingConfiguration create onSave={async (configuration, details) => {
       const data = await request("/config", { ...details, configuration });
       const origin = window.location.origin;
+      for (const { id, token } of data.links) rememberTeamLink(data.roomId, id, token);
       setSaved({ ...data, links: data.links.map(({ id, token }) => ({
         id, url: origin + "/room/" + data.roomId + "#team=" + token,
       })) });

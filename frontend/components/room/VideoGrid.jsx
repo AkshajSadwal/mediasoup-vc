@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MicOff, Pin, PinOff, Presentation } from "lucide-react";
 
-export function StreamElement({ stream, audio = false, onBlocked, sink, onSinkError }) {
+export function StreamElement({ stream, audio = false, onBlocked, onOrientationChange, sink, onSinkError }) {
   const ref = useRef(null);
   useEffect(() => {
     const element = ref.current;
@@ -11,9 +11,26 @@ export function StreamElement({ stream, audio = false, onBlocked, sink, onSinkEr
     const element = ref.current;
     if (!element) return;
     element.srcObject = stream;
+    // Camera tiles follow the actual decoded frame orientation. This also reacts
+    // when a phone rotates during a call or a participant changes camera.
+    const updateOrientation = () => {
+      if (audio || !onOrientationChange) return;
+      const { videoWidth: width, videoHeight: height } = element;
+      if (width > 0 && height > 0) onOrientationChange(height > width ? "portrait" : "landscape");
+    };
+    if (!audio) {
+      onOrientationChange?.("landscape");
+      element.addEventListener("loadedmetadata", updateOrientation);
+      element.addEventListener("resize", updateOrientation);
+      updateOrientation();
+    }
     element.play().catch((error) => { if (error.name === "NotAllowedError") onBlocked?.(); });
-    return () => { element.srcObject = null; };
-  }, [stream, onBlocked]);
+    return () => {
+      element.removeEventListener("loadedmetadata", updateOrientation);
+      element.removeEventListener("resize", updateOrientation);
+      element.srcObject = null;
+    };
+  }, [stream, audio, onBlocked, onOrientationChange]);
   return audio ? <audio ref={ref} autoPlay /> : <video ref={ref} autoPlay playsInline muted />;
 }
 
@@ -33,14 +50,20 @@ export function MeetingAudio({ items, sink, onSinkError }) {
 
 function Tile({ person, stream, presentation, pinned, onPin, onSpotlight, staged }) {
   const name = person?.name || "Participant";
+  const [orientation, setOrientation] = useState("landscape");
+  const updateOrientation = useCallback((value) => setOrientation((current) => current === value ? current : value), []);
+  const avatarUrl = person?.avatarUrl?.startsWith("http") ? person.avatarUrl :
+    person?.avatarUrl ? (process.env.NEXT_PUBLIC_BACKEND_URL || "") + person.avatarUrl : null;
   return (
-    <div className="meeting-tile" data-record-tile data-name={presentation ? name + " • Sharing screen" : name}>
-      {stream ? <StreamElement stream={stream} /> : <div className="meeting-avatar">
-        {person?.avatarUrl ? <img alt="" src={person.avatarUrl.startsWith("http") ? person.avatarUrl : (process.env.NEXT_PUBLIC_BACKEND_URL || "") + person.avatarUrl} /> : name.charAt(0).toUpperCase()}
+    <div className={presentation ? "meeting-tile meeting-tile--presentation" : "meeting-tile"}
+      data-orientation={stream ? orientation : "landscape"}
+      data-record-tile data-name={presentation ? name + " • Sharing screen" : name}>
+      {stream ? <StreamElement stream={stream} onOrientationChange={updateOrientation} /> : <div className="meeting-avatar">
+        {avatarUrl ? <img alt="" src={avatarUrl} /> : name.charAt(0).toUpperCase()}
       </div>}
       <div className="meeting-tile-caption">
-        {!presentation && person?.audioEnabled === false && <MicOff size={14} />}
-        <span>{name}{presentation ? " • Sharing screen" : ""}</span>
+        {!presentation && person?.audioEnabled === false && <span className="meeting-tile-muted" aria-label="Microphone off"><MicOff size={14} /></span>}
+        <span title={name}>{name}{presentation ? " • Sharing screen" : ""}</span>
       </div>
       {!presentation && <div className="meeting-tile-actions">
         {onSpotlight && <button type="button" onClick={onSpotlight} title={staged ? "Remove spotlight" : "Spotlight for this room"} aria-label={staged ? "Remove spotlight" : "Spotlight for this room"}><Presentation size={16} /></button>}

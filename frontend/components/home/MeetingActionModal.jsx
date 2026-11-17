@@ -43,11 +43,11 @@ export default function MeetingActionModal({ mode = "create", onClose, onCreateI
   };
 
   return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-[#132033]/28 p-5 backdrop-blur-[7px]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="w-full max-w-[510px] overflow-hidden rounded-[28px] border border-[#e6ebf2] bg-white shadow-[0_30px_100px_rgba(22,38,66,0.22)]">
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-[#131c33]/50 p-3 backdrop-blur-[7px] sm:p-5" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="meeting-action-title" className="max-h-[calc(100dvh-24px)] w-full max-w-[510px] overflow-y-auto rounded-[25px] border border-[#e6ebf2] bg-white shadow-[0_30px_100px_rgba(22,38,66,0.25)] sm:rounded-[28px]">
         <div className="flex items-start justify-between px-7 pb-4 pt-6">
           <div>
-            <h2 className="text-[23px] font-semibold tracking-[-0.03em] text-[#111827]">{activeMode === "join" ? "Join a meeting" : "New meeting"}</h2>
+            <h2 id="meeting-action-title" className="text-[23px] font-semibold tracking-[-0.03em] text-[#111827]">{activeMode === "join" ? "Join a meeting" : "New meeting"}</h2>
             <p className="mt-1 text-[13px] text-[#778397]">{activeMode === "join" ? "Enter a room code to join." : "Start now or reserve a room for later."}</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-[#738096] transition hover:bg-[#f3f6fa] hover:text-[#111827]" aria-label="Close">
@@ -67,16 +67,16 @@ export default function MeetingActionModal({ mode = "create", onClose, onCreateI
                   </div>
                 </div>
               </div>
-              <input autoFocus value={roomId} onChange={(e) => setRoomId(e.target.value)} placeholder="Enter meeting code" className="h-13 w-full rounded-[14px] border border-[#dfe5ee] bg-white px-4 text-[15px] outline-none transition focus:border-[#2a77f4] focus:ring-4 focus:ring-[#2a77f4]/10" />
+              <input autoFocus aria-label="Meeting code" required value={roomId} onChange={(e) => setRoomId(e.target.value)} placeholder="Enter meeting code" className="h-13 w-full rounded-[14px] border border-[#dfe5ee] bg-white px-4 text-[15px] outline-none transition focus:border-[#2a77f4] focus:ring-4 focus:ring-[#2a77f4]/10" />
               {error && <p className="rounded-[13px] bg-[#fff0f1] px-4 py-3 text-[13px] font-medium text-[#c53b4a]">{error}</p>}
               <button disabled={busy} className="h-[54px] w-full rounded-[15px] bg-[#176df3] text-[15px] font-semibold text-white shadow-[0_14px_30px_rgba(23,109,243,0.2)] transition hover:bg-[#0f62e6] disabled:opacity-60">{busy ? "Joining..." : "Join meeting"}</button>
             </form>
           ) : (
             <form onSubmit={submit} className="space-y-5">
               <div className="grid grid-cols-3 gap-1 rounded-[14px] bg-[#f0f4f9] p-1">
-                <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("instant"); setError(""); }} className={`rounded-[11px] px-4 py-2.5 text-[13px] font-semibold transition ${activeCreateMode === "instant" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Instant meeting</button>
-                <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("schedule"); setError(""); }} className={`rounded-[11px] px-4 py-2.5 text-[13px] font-semibold transition ${activeCreateMode === "schedule" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Schedule meeting</button>
-                <button type="button" onClick={onConfigure} className="min-h-11 rounded-[11px] px-2 py-2 text-[13px] font-semibold text-[#176df3]">Config meeting</button>
+                <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("instant"); setError(""); }} className={`rounded-[11px] px-2 py-2.5 text-[11px] font-semibold transition sm:px-4 sm:text-[13px] ${activeCreateMode === "instant" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Instant meeting</button>
+                <button type="button" onClick={() => { setActiveMode("create"); setActiveCreateMode("schedule"); setError(""); }} className={`rounded-[11px] px-2 py-2.5 text-[11px] font-semibold transition sm:px-4 sm:text-[13px] ${activeCreateMode === "schedule" ? "bg-white text-[#176df3] shadow-sm" : "text-[#6b7789]"}`}>Schedule meeting</button>
+                <button type="button" onClick={onConfigure} className="min-h-11 rounded-[11px] px-1 py-2 text-[11px] font-semibold text-[#176df3] sm:text-[13px]">Config meeting</button>
               </div>
 
               {activeCreateMode === "instant" ? (
@@ -92,7 +92,7 @@ export default function MeetingActionModal({ mode = "create", onClose, onCreateI
               ) : (
                 <div className="space-y-4">
                   <label className="block"><span className="mb-2 block text-[12px] font-semibold text-[#596679]">Meeting title</span><input value={title} onChange={(e) => setTitle(e.target.value)} className="h-13 w-full rounded-[14px] border border-[#dfe5ee] px-4 outline-none focus:border-[#2a77f4] focus:ring-4 focus:ring-[#2a77f4]/10" /></label>
-                  <label className="block"><span className="mb-2 block text-[12px] font-semibold text-[#596679]">Date and time</span><input required type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="h-13 w-full rounded-[14px] border border-[#dfe5ee] px-4 outline-none focus:border-[#2a77f4] focus:ring-4 focus:ring-[#2a77f4]/10" /></label>
+                  <label className="block"><span className="mb-2 block text-[12px] font-semibold text-[#596679]">Date and time</span><input required type="datetime-local" min={(() => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })()} value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="h-13 w-full rounded-[14px] border border-[#dfe5ee] px-4 outline-none focus:border-[#2a77f4] focus:ring-4 focus:ring-[#2a77f4]/10" /></label>
                 </div>
               )}
 

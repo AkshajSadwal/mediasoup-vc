@@ -27,7 +27,7 @@ export default function MeetingPanel({
   joinRequests = [],
   onApproveRequest,
   onPromoteModerator,
-  onAttachment, pollCards, canChat = true, meetingConfiguration,
+  onAttachment, pollCards, canChat = true, meetingConfiguration, teamLinks, settingsError, onRetrySettings,
 }) {
   const messageEndRef = useRef(null);
 
@@ -99,7 +99,9 @@ export default function MeetingPanel({
         </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
+          {isHost && settingsError && <p role="alert" className="text-sm text-red-700">{settingsError} <button type="button" className="underline" onClick={onRetrySettings}>Retry</button></p>}
           {isHost && meetingConfiguration}
+          {isHost && teamLinks}
           {isHost && <section className="rounded-2xl border border-[#dce6f2] bg-[#f7faff] p-4">
             <h3 className="font-semibold text-[#172033]">Meeting access</h3>
             <p className="mt-1 text-sm text-[#718096]">Choose who can enter this meeting.</p>

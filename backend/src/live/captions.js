@@ -7,6 +7,9 @@ import { VoskAdapter, opusPayload } from "../captions/voskAdapter.js";
 let adapter = new VoskAdapter();
 let idleTimer;
 const rooms = new Map();
+// Opt-in browser recognition is separate from server Vosk. Text is relayed to
+// subscribers in this exact room, never to another breakout or unsusbcribed peer.
+const browserViewers = new Map();
 
 export function setCaptionAdapter(replacement) {
   if (rooms.size) throw new Error("Caption rooms are active.");
@@ -105,6 +108,13 @@ async function startSource(state, peer, producer) {
 }
 
 export function reconcileCaptions(meeting, key) {
+  const local = browserViewers.get(key);
+  if (local) {
+    for (const [id, viewer] of local) {
+      if (!viewer.peer.ready || viewer.peer.roomName !== key || viewer.peer.roomToken !== viewer.token) local.delete(id);
+    }
+    if (!local.size) browserViewers.delete(key);
+  }
   const state = rooms.get(key);
   if (!state) return;
   for (const [socket, viewer] of state.viewers) if (!validViewer(viewer, state)) state.viewers.delete(socket);
@@ -147,4 +157,49 @@ export async function subscribeCaptions(peer, data) {
   }
   state.viewers.set(peer.socket.id, { peer, token, subscription: data.subscription });
   reconcileCaptions(peer.meeting, key);
+}
+
+// Browser SpeechRecognition fallback: users opt in locally before their browser
+// processes microphone audio. The server only relays bounded, authenticated text.
+export function subscribeBrowserCaptions(peer, data) {
+  rate(peer, "browser-caption-subscribe", 8);
+  if (typeof data.enabled !== "boolean" || typeof data.subscription !== "string" ||
+      !/^[a-f0-9-]{36}$/.test(data.subscription)) throw new Error("Invalid caption subscription.");
+  let viewers = browserViewers.get(peer.roomName);
+  if (!data.enabled) {
+    viewers?.delete(peer.socket.id);
+    if (viewers && !viewers.size) browserViewers.delete(peer.roomName);
+    return;
+  }
+  if (!viewers) {
+    viewers = new Map();
+    browserViewers.set(peer.roomName, viewers);
+  }
+  viewers.set(peer.socket.id, { peer, token: peer.roomToken, subscription: data.subscription });
+}
+
+export function publishBrowserCaption(peer, data) {
+  rate(peer, "browser-caption-publish", 60);
+  if (!audioAllowed(peer, "microphone") || !getProducersByPeer(peer.socket.id, "audio")
+    .some(({ source, producer }) => source === "microphone" && !producer.closed && !producer.paused)) {
+    throw new Error("An active microphone is required to share captions.");
+  }
+  if (typeof data.final !== "boolean" || typeof data.text !== "string" ||
+      data.text.length > 500 || !/^[a-f0-9-]{36}$/.test(data.streamId) ||
+      !/^[a-f0-9-]{36}$/.test(data.utteranceId) ||
+      !Number.isSafeInteger(data.sequence) || data.sequence < 1 || data.sequence > 1_000_000) {
+    throw new Error("Invalid browser caption.");
+  }
+  const text = data.text.trim();
+  if (!text) return;
+  const viewers = browserViewers.get(peer.roomName);
+  if (!viewers) return;
+  for (const viewer of viewers.values()) {
+    if (!viewer.peer.ready || viewer.peer.roomName !== peer.roomName || viewer.peer.roomToken !== viewer.token) continue;
+    viewer.peer.socket.emit("caption-update", { roomId: viewer.peer.activeRoomId,
+      roomToken: viewer.token, subscription: viewer.subscription,
+      speakerId: peer.userId, speaker: peer.displayName,
+      streamId: data.streamId, utteranceId: data.utteranceId,
+      sequence: data.sequence, type: data.final ? "final" : "partial", text });
+  }
 }

@@ -56,7 +56,7 @@ export default function AccountSettingsModal({ session, onClose }) {
     }
     setSaving(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
+      const response = await fetch(`/api/auth/profile`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

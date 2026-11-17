@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Download, PenLine, Presentation, Redo2, Trash2, Undo2, X } from "lucide-react";
 
 const dimensions = [1200, 750];
 const tools = ["pen", "eraser", "line", "rectangle", "ellipse", "text"];
@@ -31,6 +32,8 @@ function paint(context, operation) {
 
 export default function Whiteboard({ live, userId, action, close }) {
   const canvas = useRef(null);
+  const surface = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const gesture = useRef(null);
   const [tool, setTool] = useState("pen");
   const [color, setColor] = useState("#176df3");
@@ -52,9 +55,36 @@ export default function Whiteboard({ live, userId, action, close }) {
     if (!canEdit) gesture.current = null;
     draw();
   });
+  // The drawing buffer stays 1200x750 while its CSS size fits the actual stage.
+  // Observe the *surface*, not the canvas, to avoid a resize feedback loop.
+  useEffect(() => {
+    const element = surface.current;
+    if (!element) return;
+    const updateSize = () => {
+      const box = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      const availableWidth = Math.max(0, box.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+      const availableHeight = Math.max(0, box.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+      const scale = Math.min(availableWidth / dimensions[0], availableHeight / dimensions[1]);
+      const next = {
+        width: Math.max(0, Math.floor(dimensions[0] * scale)),
+        height: Math.max(0, Math.floor(dimensions[1] * scale)),
+      };
+      setCanvasSize((previous) => previous.width === next.width && previous.height === next.height ? previous : next);
+    };
+    updateSize();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateSize);
+      return () => window.removeEventListener("resize", updateSize);
+    }
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const position = (event) => {
     const box = canvas.current.getBoundingClientRect();
-    const scale = (value, size) => Math.round(Math.max(0, Math.min(1, value / size)) * 1000);
+    const scale = (value, size) => Math.round(Math.max(0, Math.min(1, value / Math.max(1, size))) * 1000);
     return [scale(event.clientX - box.left, box.width), scale(event.clientY - box.top, box.height)];
   };
   const start = (event) => {
@@ -90,23 +120,42 @@ export default function Whiteboard({ live, userId, action, close }) {
     link.click();
   };
   return <div className="meeting-board">
-    <div className="meeting-board-tools">
-      {canEdit && <>
-        <select aria-label="Drawing tool" value={tool} onChange={(event) => setTool(event.target.value)}>
-          {tools.map((entry) => <option key={entry}>{entry}</option>)}
-        </select>
-        <input aria-label="Drawing color" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
-        {tool === "text" && <input aria-label="Board text" maxLength={120} value={text} onChange={(event) => setText(event.target.value)} placeholder="Type text, then tap board" />}
-        <button disabled={!undo} onClick={() => action("board-undo", { id: undo.id })}>Undo</button>
-        <button disabled={!redo} onClick={() => action("board-redo", { id: redo.id })}>Redo</button>
-        <button onClick={() => action("present-board", { active: !live.boardPresented })}>{live.boardPresented ? "Stop presenting" : "Present board"}</button>
-      </>}
-      {!canEdit && <button disabled={live.requested.includes("whiteboard")} onClick={() => action("request", { feature: "whiteboard" })}>{live.requested.includes("whiteboard") ? "Access requested" : "Request editing access"}</button>}
-      {live.role === "host" && <button onClick={() => action("board-clear")}>Clear board</button>}
-      <button onClick={save}>Export PNG</button>
-      <button onClick={close}>Close my board</button>
+    <div className="meeting-board-header">
+      <div className="meeting-board-heading">
+        <span className="meeting-board-heading-icon"><PenLine size={18} /></span>
+        <div>
+          <strong>Whiteboard</strong>
+          <span>Shared canvas · 1200 × 750</span>
+        </div>
+      </div>
+      <div className="meeting-board-header-actions">
+        <button type="button" className="meeting-board-export" onClick={save} title="Save a copy of the whiteboard"><Download size={16} /> <span>Export PNG</span></button>
+        <button type="button" className="meeting-board-close" aria-label="Close my whiteboard" title="Close my whiteboard" onClick={close}><X size={18} /></button>
+      </div>
     </div>
-    <canvas ref={canvas} data-record-tile data-name="Whiteboard" aria-label="Shared whiteboard" width={dimensions[0]} height={dimensions[1]}
-      onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} />
+    <div className="meeting-board-tools" role="toolbar" aria-label="Whiteboard drawing tools">
+      {canEdit && <>
+        <label className="meeting-board-tool-label">Tool
+          <select aria-label="Drawing tool" value={tool} onChange={(event) => setTool(event.target.value)}>
+            {tools.map((entry) => <option key={entry} value={entry}>{entry[0].toUpperCase() + entry.slice(1)}</option>)}
+          </select>
+        </label>
+        <label className="meeting-board-color-label" title="Choose drawing color">Color
+          <input aria-label="Drawing color" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+        </label>
+        {tool === "text" && <input className="meeting-board-text-input" aria-label="Board text" maxLength={120} value={text} onChange={(event) => setText(event.target.value)} placeholder="Type text to place on the board" />}
+        <span className="meeting-board-tool-divider" aria-hidden />
+        <button type="button" disabled={!undo} onClick={() => action("board-undo", { id: undo.id })}><Undo2 size={16} /> Undo</button>
+        <button type="button" disabled={!redo} onClick={() => action("board-redo", { id: redo.id })}><Redo2 size={16} /> Redo</button>
+        <button type="button" className={live.boardPresented ? "meeting-board-present is-presenting" : "meeting-board-present"} onClick={() => action("present-board", { active: !live.boardPresented })}><Presentation size={16} /> {live.boardPresented ? "Stop presenting" : "Present board"}</button>
+      </>}
+      {!canEdit && <button type="button" disabled={live.requested.includes("whiteboard")} onClick={() => action("request", { feature: "whiteboard" })}>{live.requested.includes("whiteboard") ? "Access requested" : "Request editing access"}</button>}
+      {live.role === "host" && <button type="button" className="meeting-board-clear" onClick={() => action("board-clear")}><Trash2 size={16} /> Clear board</button>}
+    </div>
+    <div className="meeting-board-surface" ref={surface}>
+      <canvas ref={canvas} data-record-tile data-name="Whiteboard" aria-label="Shared whiteboard" width={dimensions[0]} height={dimensions[1]}
+        style={canvasSize.width && canvasSize.height ? { width: canvasSize.width, height: canvasSize.height } : undefined}
+        onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} />
+    </div>
   </div>;
 }

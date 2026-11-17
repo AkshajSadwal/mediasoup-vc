@@ -1,28 +1,20 @@
 "use client";
 
-import { Link2, Video } from "lucide-react";
+import { ArrowRight, Link2, ShieldCheck, Sparkles, Video } from "lucide-react";
 
 export default function HeroCopy({ onCreate, onJoin }) {
   return (
-    <section className="flex flex-col justify-center pt-2 lg:min-h-[520px]">
-      <h1 className="select-none caret-transparent cursor-default max-w-[710px] text-[58px] font-semibold leading-[0.98] tracking-[-0.055em] text-[#0b111a] sm:text-[74px] lg:text-[82px]">
-        Good meetings
-        <br />
-        <span className="bg-gradient-to-r from-[#126cf2] via-[#2476f0] to-[#4b9af7] bg-clip-text text-transparent">build great things.</span>
+    <section className="relative z-10 flex flex-col justify-center py-8 lg:py-16">
+      <div className="mb-7 inline-flex w-fit items-center gap-2 rounded-full border border-[#dfe5ff] bg-white/80 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[.14em] text-[#5869d2] shadow-[0_6px_24px_rgba(68,93,167,.04)]"><Sparkles size={14} /> Your space to connect</div>
+      <h1 className="max-w-[720px] text-[clamp(2.45rem,4.6vw,5.95rem)] sm:text-[clamp(3.6rem,5.55vw,5.95rem)] font-bold leading-[1.025] tracking-[-.074em] text-[#121a34]">
+        Make room for <span className="relative inline-block text-[#536cf6]">better<span className="absolute bottom-[.02em] left-1 right-0 -z-10 h-[.16em] -rotate-[2deg] rounded-full bg-[#dfe5ff]" /></span> conversations.
       </h1>
-      <p className="select-none caret-transparent mt-6 max-w-[620px] text-[18px] leading-7 text-[#4f5d70] sm:text-[20px]">
-        Rauma is a video meeting platform that helps teams connect, collaborate, and get work done — all in one place.
-      </p>
-      <div className="mt-8 flex flex-wrap gap-4">
-        <button type="button" onClick={onCreate} className="inline-flex items-center gap-3 rounded-[13px] bg-[#176df3] px-7 py-4 text-[15px] font-semibold text-white shadow-[0_18px_36px_rgba(23,109,243,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0f63e8]">
-          <Video className="h-5 w-5" strokeWidth={2} />
-          Start a meeting
-        </button>
-        <button type="button" onClick={onJoin} className="inline-flex items-center gap-3 rounded-[13px] bg-[#f3f6fa] px-7 py-4 text-[15px] font-semibold text-[#16202d] shadow-[0_10px_28px_rgba(17,24,39,0.04)] transition hover:-translate-y-0.5 hover:bg-[#edf2f8]">
-          <Link2 className="h-5 w-5" strokeWidth={1.9} />
-          Join with a code
-        </button>
+      <p className="mt-7 max-w-[520px] text-[16px] leading-[1.8] text-[#68758d] sm:text-[18px]">From a quick catch-up to your team's next big idea. Bring everyone together with effortless video meetings and tools that keep you in sync.</p>
+      <div className="mt-9 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={onCreate} className="primary-button group"><Video size={20} /> Start a meeting <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" /></button>
+        <button type="button" onClick={onJoin} className="secondary-button"><Link2 size={19} /> Join with a code</button>
       </div>
+      <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 text-[12px] font-medium text-[#78839a]"><span className="flex items-center gap-2"><ShieldCheck size={16} className="text-[#2ea893]" /> Host-controlled rooms</span><span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#38c4a9]" /> Built for real-time teamwork</span></div>
     </section>
   );
 }

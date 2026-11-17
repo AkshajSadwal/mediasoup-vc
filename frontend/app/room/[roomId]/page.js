@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useMeetingOutput } from "@/components/room/DeviceSettings";
 import MeetingConfiguration, { emptyConfiguration } from "@/components/room/MeetingConfiguration";
+import TeamLinks from "@/components/room/TeamLinks";
 import RoomHeader from "@/components/room/RoomHeader";
 import VideoGrid, { MeetingAudio } from "@/components/room/VideoGrid";
 import BottomControls from "@/components/room/BottomControls";
@@ -25,7 +26,7 @@ import "@/components/room/meeting.css";
 
 const corePanels = ["chat", "participants", "settings"];
 const titles = { attach: "Attach to chat", poll: "New poll", vote: "New vote", files: "File sharing", permissions: "Permissions",
-  hands: "Raised hands", breakouts: "Breakout rooms", recording: "Local recording", captions: "English server captions", backgrounds: "Camera background", sharing: "Screen sharing" };
+  hands: "Raised hands", breakouts: "Breakout rooms", recording: "Local recording", captions: "Live captions", backgrounds: "Camera background", sharing: "Screen sharing" };
 
 function Countdown({ until, breakout, offset }) {
   const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((until - Date.now() - offset) / 1000)));
@@ -112,7 +113,7 @@ export default function MeetingPage() {
   }, [speech, call.display, live?.muted, selfMember?.awaitingUnmute]);
 
   const recorder = useRecorder(call.media, live?.features.recording, body, recordedAudio, notify);
-  const captions = useCaptions(call.media);
+  const captions = useCaptions(call.media, call.audioEnabled);
   const files = useFiles(call.media, notify);
   const background = useBackground(call.media, call.rawVideoTrack, call.replaceCamera, notify);
 
@@ -142,11 +143,11 @@ export default function MeetingPage() {
   };
   const tools = [
     ["Chat", () => openPanel("chat")], ["Participants", () => openPanel("participants")],
-    ...(isHost ? [["Host settings", () => openPanel("settings")]] : []),
+    ...(isHost ? [["Host settings", () => openPanel("settings")], ["Team links", () => openPanel("settings")]] : []),
     ["Screen sharing", () => openPanel("sharing")], ["Share invite link", invite],
     ["Copy meeting code", copyCode],
     ["Whiteboard", () => { setHideBoard(false); setLocalBoard(true); }], ["Raised hands", () => openPanel("hands")],
-    ["Local recording", () => openPanel("recording")], ["English captions", () => openPanel("captions")],
+    ["Local recording", () => openPanel("recording")], ["Live captions", () => openPanel("captions")],
     ["Camera background", () => openPanel("backgrounds")], ["Permissions", () => openPanel("permissions")],
     ["Breakout rooms", () => openPanel("breakouts")],
   ];
@@ -157,11 +158,11 @@ export default function MeetingPage() {
   return <main className="meeting-shell">
     <RoomHeader roomName={meetingId} live={live} ready={Boolean(call.media)} participantCount={live ? people.length : 0}
       fileOffer={files.state?.phase === "offer"} onFile={() => openPanel("files")} onRecording={() => openPanel("recording")}
-      onChat={() => openPanel("chat")} onPeople={() => openPanel("participants")} />
+      onChat={() => openPanel("chat")} onPeople={() => openPanel("participants")} onInvite={invite} onCopyCode={copyCode} />
     {end && <Countdown key={end} until={end} offset={live.clockOffset} breakout={live.roomId !== "main"} />}
     {live?.notice && <p className="meeting-banner" role="status">Host notice · {live.notice.text}</p>}
     {live?.muted && <p className="meeting-banner">Speaking is restricted by the host or a moderator.</p>}
-    {captions.status === "Captions unavailable" && panel !== "captions" && <p className="meeting-banner"><button onClick={() => openPanel("captions")}>{captions.status}</button></p>}
+    {captions.status?.startsWith("Captions unavailable") && panel !== "captions" && <p className="meeting-banner"><button onClick={() => openPanel("captions")}>{captions.status}</button></p>}
     {recorder.output && panel !== "recording" && <p className="meeting-banner"><button onClick={() => openPanel("recording")}>Recording ready to save</button></p>}
     <div className="meeting-body" ref={body}>
       <VideoGrid people={people} cameras={cameras} screen={localBoard && board ? null : display} board={board} pinned={people.some((person) => person.userId === pin) ? pin : null}
@@ -178,8 +179,11 @@ export default function MeetingPage() {
           localPeerId={call.self?.peerId} localName={localName} localAvatarUrl={call.self?.avatarUrl}
           isAdmin={isHost} isHost={isHost} isModerator={isModerator} onAttachment={() => setPanel("attach")}
           canChat={live?.features.chat !== false} meetingConfiguration={isHost && panel === "settings" && <MeetingConfiguration
+            key={(admission.configuration?.teams || []).map(({ id }) => id).join(",")}
             initial={{ ...(admission.configuration || emptyConfiguration()), defaults: live.defaults, overrides: live.overrides }}
             participants={live.members} onSave={admission.saveConfiguration} />}
+          teamLinks={isHost && <TeamLinks roomId={meetingId} configuration={admission.configuration} issueTeam={admission.issueTeam} />}
+          settingsError={admission.loadError} onRetrySettings={() => admission.refreshMeeting().catch((error) => notify(error.message))}
           pollCards={live?.polls.length > 0 && <Polls live={live} action={action} />}
           visibility={admission.meetingVisibility} onVisibilityChange={admission.changeVisibility}
           joinRequests={admission.joinRequests} onApproveRequest={admission.resolveJoinRequest} onPromoteModerator={admission.toggleModerator}
@@ -197,9 +201,9 @@ export default function MeetingPage() {
               {panel === "recording" && <Recording recorder={recorder} live={live} action={action} />}
               {panel === "backgrounds" && <Backgrounds effects={background} userId={userId} />}
               {panel === "captions" && <section className="meeting-tool">
-                <p>The meeting server transcribes unmuted microphones in this room while viewers subscribe. Captions appear only for viewers who turn them on.</p>
+                <p>Turn on captions to transcribe speech in this room. If the server's optional Vosk model is not installed, supported browsers can transcribe your microphone when unmuted and share the text with others who enable captions. Browser recognition may use your browser provider's online speech service.</p>
                 {captions.status && <p role="status">{captions.status}</p>}
-                <button onClick={captions.toggle}>{captions.enabled ? "Turn captions off" : "Turn English captions on"}</button>
+                <button onClick={captions.toggle}>{captions.enabled ? "Turn captions off" : "Turn captions on"}</button>
               </section>}
               {panel === "sharing" && <section className="meeting-tool">
                 <p>Your browser opens its tab, window, or screen picker. Available sources and audio depend on your browser and operating system.</p>

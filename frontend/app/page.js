@@ -11,7 +11,7 @@ import HeroCopy from "@/components/home/landing/HeroCopy";
 import MeetingHeroVisual from "@/components/home/landing/MeetingHeroVisual";
 import FeatureStrip from "@/components/home/landing/FeatureStrip";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "";
 
 export default function Home() {
   const router = useRouter();
@@ -111,21 +111,22 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-white text-[#111827]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[780px] overflow-hidden"><div className="absolute -left-[12%] top-[150px] h-[420px] w-[520px] rounded-full bg-[#e7f0ff] blur-[110px]" /><div className="absolute left-[48%] top-[70px] h-[420px] w-[520px] rounded-full bg-[#eef6ff] blur-[120px]" /><div className="absolute right-[-10%] top-[210px] h-[420px] w-[520px] rounded-full bg-[#f1f6ff] blur-[120px]" /></div>
+    <main className="site-shell relative min-h-screen overflow-x-hidden text-[#16203b]">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[850px] overflow-hidden"><div className="absolute -left-[18%] top-[150px] h-[530px] w-[630px] rounded-full bg-[#e9edff] opacity-70 blur-[110px]" /><div className="absolute right-[-18%] top-[10px] h-[620px] w-[780px] rounded-full bg-[#eaf7ff] opacity-60 blur-[115px]" /></div>
       <LandingHeader session={session} onMeetingAction={meetingAction} />
-      <div className="relative mx-auto max-w-[1580px] px-7 pb-10 lg:px-12">
-        <section className="grid items-center gap-8 lg:grid-cols-[0.86fr_1.14fr]">
+      <div className="relative mx-auto max-w-[1440px] px-5 pb-12 pt-5 sm:px-8 lg:px-12">
+        <section className="grid items-center gap-5 lg:min-h-[600px] lg:grid-cols-[1.02fr_0.98fr] lg:gap-9">
           <HeroCopy onCreate={() => setModal("create")} onJoin={() => setModal("join")} />
           <MeetingHeroVisual onAddMeeting={() => { if (ensureAuth("/")) setModal("add"); }} />
         </section>
-        <div className="mt-2 sm:mt-5">
+        <div className="relative mt-12 sm:mt-8 lg:mt-4">
           <FeatureStrip
-            onInstant={() => { if (ensureAuth("/")) createInstantMeeting(); }}
+            onInstant={() => { if (ensureAuth("/")) void createInstantMeeting().catch((error) => setJoinError(error.message || "Could not start the meeting.")); }}
             onSchedule={() => { if (ensureAuth("/schedule")) router.push("/schedule"); }}
             onJoin={() => { if (ensureAuth("/")) setModal("join"); }}
           />
         </div>
+        <footer className="relative mt-11 flex flex-wrap items-center justify-between gap-3 border-t border-[#e0e5f0] pt-6 text-[12px] text-[#8792a7]"><span>Rauma · A better place to meet</span><span>Made for meaningful collaboration</span></footer>
       </div>
 
       {(modal === "create" || modal === "join") && <MeetingActionModal mode={modal} onClose={() => setModal(null)} onCreateInstant={createInstantMeeting} onSchedule={scheduleMeeting} onConfigure={() => meetingAction("config")} onJoin={async (roomId) => { try { await joinMeeting(roomId); } catch (error) { setJoinError(error.message); throw error; } }} />}

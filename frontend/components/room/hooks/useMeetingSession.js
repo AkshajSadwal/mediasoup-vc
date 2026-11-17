@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { captureInput, inputConstraints, mediaPreferences, saveMediaPreferences } from "./mediaDevices";
 import { request, RoomMedia } from "./roomMedia";
 
-const backend = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const socketOrigin = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 async function captureDevices(audio, video, userId) {
   const prefs = mediaPreferences(userId);
@@ -208,14 +208,14 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
     };
     const begin = async () => {
       if (!token) return router.replace(`/login?callbackUrl=${encodeURIComponent(route)}`);
-      const check = await fetch(`${backend}/api/meetings/${encodeURIComponent(meetingId)}`, {
+      const check = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (disposed) return;
       if (check.ok && !(await check.json()).open) return router.replace(`/waiting/${meetingId}`);
       if (!check.ok && check.status !== 404) throw new Error(`Meeting check failed (${check.status}).`);
       if (disposed) return;
-      socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL || ""}/mediasoup`, { path: "/socket.io", auth: { token } });
+      socket = io(`${socketOrigin}/mediasoup`, { path: "/socket.io", auth: { token } });
       connection.current = socket;
       let pending = new Map();
       let closed = new Set();

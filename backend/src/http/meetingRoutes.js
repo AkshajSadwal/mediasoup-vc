@@ -13,10 +13,11 @@ import {
   approveMeetingRequest,
   setMeetingModerator,
   createConfiguredMeeting,
+  issueTeamLink,
   updateMeetingConfiguration,
   saveBreakoutSession,
 } from "../meetings/meetingStore.js";
-import { publicConfiguration, validateConfiguration } from "../meetings/configuration.js";
+import { emptyConfiguration, publicConfiguration, validateConfiguration } from "../meetings/configuration.js";
 import { requireAuth } from "./authMiddleware.js";
 import { applyConfiguration, findLiveMeeting, role } from "../live/state.js";
 import { publish, reevaluate } from "../live/controller.js";
@@ -72,8 +73,20 @@ router.get("/", requireAuth, (req, res) => {
 
 router.get("/:roomId", requireAuth, (req, res) => {
   const meeting = getMeeting(req.params.roomId);
-  if (!meeting) return res.status(404).json({ error: "Meeting not found." });
-  res.json(publicMeeting(meeting, req.user.id));
+  if (meeting) return res.set("Cache-Control", "no-store").json(publicMeeting(meeting, req.user.id));
+  // Unscheduled rooms can exist in memory before the host saves any settings.
+  // Only current members may read this temporary room's settings.
+  const live = findLiveMeeting(req.params.roomId);
+  if (!live?.members.get(req.user.id)?.peer?.ready) return res.status(404).json({ error: "Meeting not found." });
+  const isHost = req.user.id === live.hostId;
+  res.set("Cache-Control", "no-store").json({ roomId: live.id, title: "Rauma Meeting", status: "live",
+    open: true, isHost, visibility: "public", canJoin: true, joinRequests: isHost ? [] : undefined,
+    configuration: isHost ? publicConfiguration({ ...emptyConfiguration(), defaults: live.defaults,
+      initial: live.initial, overrides: Object.fromEntries(live.overrides),
+      rooms: [...live.rooms.values()].filter((room) => room.id !== "main" && !room.expired)
+        .slice(0, 5).map(({ id, title }) => ({ id, title })),
+      assignments: Object.fromEntries(live.assignments), duration: live.duration,
+      teams: live.teams || [] }) : undefined });
 });
 
 
@@ -126,6 +139,33 @@ router.patch("/:roomId/config", requireAuth, (req, res) => {
       publish(live);
     }
     res.json(publicMeeting(meeting, req.user.id));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+router.post("/:roomId/teams", requireAuth, (req, res) => {
+  try {
+    // The first participant is the host for an unscheduled/unsaved meeting.
+    // Persist it only after verifying the authenticated host identity.
+    const live = findLiveMeeting(req.params.roomId);
+    if (!getMeeting(req.params.roomId) && live?.hostId === req.user.id &&
+        live.members.get(req.user.id)?.peer?.ready) {
+      saveBreakoutSession(live.id, live.hostId, null);
+      const rooms = [...live.rooms.values()].filter((room) => room.id !== "main" && !room.expired)
+        .slice(0, 5).map(({ id, title }) => ({ id, title }));
+      const knownRooms = new Set(rooms.map(({ id }) => id));
+      updateMeetingConfiguration(live.id, live.hostId, { ...emptyConfiguration(),
+        defaults: live.defaults, initial: live.initial, overrides: Object.fromEntries(live.overrides),
+        rooms, assignments: Object.fromEntries([...live.assignments].filter(([, room]) => room === "main" || knownRooms.has(room))),
+        duration: live.duration });
+    }
+    const { meeting, teamId, token } = issueTeamLink(req.params.roomId, req.user.id, req.body || {});
+    if (live) {
+      live.saved = true;
+      applyConfiguration(live, meeting.configuration);
+      reevaluate(live);
+      publish(live);
+    }
+    res.set("Cache-Control", "no-store").json({ ...publicMeeting(meeting, req.user.id), link: { id: teamId, token } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

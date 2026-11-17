@@ -62,7 +62,7 @@ export function validateConfiguration(input, existingTeams = [], createTeams = f
       const teamId = crypto.randomUUID();
       const token = crypto.randomBytes(32).toString("base64url");
       links.push({ id: teamId, token });
-      return { id: teamId, name: title(team.name), room: team.room ?? null, enabled: team.enabled, hash: hashTeamToken(token) };
+      return { id: teamId, name: title(team.name), room: team.room ?? null, enabled: team.enabled, revision: 1, hash: hashTeamToken(token) };
     }
     const prior = existingTeams.find((entry) => entry.id === team.id);
     check(prior && (prior.enabled || !team.enabled), "Teams can only be issued in Config meeting. Revoked links cannot be re-enabled.");
@@ -79,10 +79,10 @@ export function emptyConfiguration() {
 
 export function publicConfiguration(config) {
   const { teams, ...settings } = config ?? emptyConfiguration();
-  return { ...settings, teams: teams.map(({ id: key, name, room, enabled }) => ({ id: key, name, room, enabled })) };
+  return { ...settings, teams: teams.map(({ id: key, name, room, enabled, revision }) => ({ id: key, name, room, enabled, revision: revision || 1 })) };
 }
 
-const hashTeamToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
+export const hashTeamToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 export function teamForToken(config, token) {
   check(typeof token === "string" && tokenPattern.test(token), "This team link is invalid or revoked.");

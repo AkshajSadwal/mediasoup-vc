@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { emptyConfiguration, teamForToken, validateConfiguration } from "./configuration.js";
+import { emptyConfiguration, hashTeamToken, teamForToken, validateConfiguration } from "./configuration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -171,6 +171,7 @@ export const setMeetingModerator = (roomId, hostUserId, targetUserId, enabled) =
 });
 
 export function createConfiguredMeeting({ hostUserId, hostName, title, visibility, config }) {
+  if (!["public", "private"].includes(visibility)) throw new Error("Invalid meeting visibility.");
   const { configuration, links } = validateConfiguration(config, [], true);
   const meeting = normalizeMeeting({
     roomId: crypto.randomUUID(), hostUserId, hostName,
@@ -186,6 +187,34 @@ export const updateMeetingConfiguration = (roomId, userId, config) => updateMeet
   if (meeting.hostUserId !== userId) throw new Error("Only the meeting host can change meeting settings.");
   meeting.configuration = validateConfiguration(config, meeting.configuration?.teams).configuration;
 });
+
+// Team URLs are bearer credentials. Persist only hashes, returning the plaintext token
+// to the host once. Reissuing a team rotates/revokes any previously shared URL.
+export function issueTeamLink(roomId, hostUserId, { teamId, name, room } = {}) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  let issued;
+  const meeting = updateMeeting(roomId, (entry) => {
+    if (entry.hostUserId !== hostUserId) throw new Error("Only the meeting host can issue team links.");
+    if (entry.status === "cancelled") throw new Error("This meeting is cancelled.");
+    entry.configuration ??= emptyConfiguration();
+    const teams = entry.configuration.teams;
+    if (teamId != null) {
+      const team = teams.find((candidate) => candidate.id === teamId);
+      if (!team) throw new Error("Team not found.");
+      team.hash = hashTeamToken(token);
+      team.revision = (team.revision || 1) + 1;
+      team.enabled = true;
+      issued = team.id;
+    } else {
+      if (teams.length >= 10) throw new Error("The meeting already has ten team links.");
+      if (typeof name !== "string" || !name.trim() || name.trim().length > 50) throw new Error("Enter a team name of 1–50 characters.");
+      if (room != null && !entry.configuration.rooms.some((item) => item.id === room)) throw new Error("Unknown breakout room.");
+      issued = crypto.randomUUID();
+      teams.push({ id: issued, name: name.trim(), room: room || null, enabled: true, revision: 1, hash: hashTeamToken(token) });
+    }
+  });
+  return { meeting, teamId: issued, token };
+}
 
 export const saveLivePolicy = (roomId, userId, defaults, overrides) => updateMeeting(roomId, (meeting) => {
   if (meeting.hostUserId !== userId) throw new Error("Only the meeting host can change meeting settings.");

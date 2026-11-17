@@ -6,12 +6,14 @@ import { sendChatMessage } from "./events/chat.events.js";
 import { adminSetAudioMuted, adminRemoveParticipant } from "./events/admin.events.js";
 import { rate } from "../live/state.js";
 
-import { subscribeCaptions } from "../live/captions.js";
+import { subscribeCaptions, subscribeBrowserCaptions, publishBrowserCaption } from "../live/captions.js";
 import { fileSignal } from "../live/files.js";
 
 export default function registerSocketHandlers(socket) {
   const events = {
     "caption-subscribe": async (s, data, cb) => { await subscribeCaptions(mountedPeer(s, data), data); cb({ ok: true }); },
+    "browser-caption-subscribe": (s, data, cb) => { subscribeBrowserCaptions(mountedPeer(s, data), data); cb({ ok: true }); },
+    "browser-caption-publish": (s, data, cb) => { publishBrowserCaption(mountedPeer(s, data), data); cb({ ok: true }); },
     joinRoom, "room-move-ready": readyToMove, "createWebRtcTransport": createTransportHandler, "restart-ice": restartIce,
     "transport-connect": (s, d, cb) => transportConnect(s, d, cb, false),
     "transport-recv-connect": (s, d, cb) => transportConnect(s, d, cb, true),

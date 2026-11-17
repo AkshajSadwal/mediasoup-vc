@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ArrowLeft, CalendarClock, Clock, Play, Video } from "lucide-react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "";
 
 export default function WaitingRoomPage() {
   const { roomId } = useParams();
@@ -112,32 +112,32 @@ export default function WaitingRoomPage() {
 
   if (sessionStatus === "loading" || !meeting)
     return (
-      <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,#edf5ff_0%,#f8fbff_42%,#ffffff_100%)] text-[#172033] grid place-items-center">
+      <main className="site-shell grid min-h-screen place-items-center px-6 text-[#17213c]">
         {error ? error : "Loading waiting room..."}
       </main>
     );
 
   return (
-    <main className="relative min-h-screen bg-[radial-gradient(ellipse_at_top,#edf5ff_0%,#f8fbff_42%,#ffffff_100%)] text-[#172033] flex items-center justify-center p-6">
+    <main className="site-shell relative flex min-h-screen items-center justify-center px-4 pb-10 pt-24 text-[#17213c] sm:px-8">
       <button
         type="button"
         onClick={() => router.push("/")}
-        className="absolute left-6 top-6 inline-flex items-center gap-2 rounded-[12px] border border-[#dce6f2] bg-white px-4 py-2.5 text-sm text-[#526176] transition hover:bg-[#f4f8fd]"
+        className="absolute left-5 top-6 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#e2e7f2] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#66748b] shadow-sm transition hover:bg-[#f4f6ff] sm:left-9"
       >
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
-      <div className="w-full max-w-2xl rounded-3xl border border-[#dce6f2] bg-white p-8 text-center shadow-[0_24px_80px_rgba(31,75,130,0.12)]">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#e8f1ff]">
-          <Clock className="h-10 w-10 text-[#176df3]" />
+      <div className="w-full max-w-[710px] rounded-[26px] border border-[#e3e8f2] bg-white px-5 py-8 text-center shadow-[0_25px_80px_rgba(31,51,95,.10)] sm:px-10 sm:py-11">
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-[25px] bg-[#e9edff]">
+          <Clock className="h-10 w-10 text-[#526bf6]" />
         </div>
-        <p className="mt-6 text-sm uppercase tracking-[0.2em] text-[#176df3]">
+        <p className="mt-6 text-[11px] font-bold uppercase tracking-[.18em] text-[#526bf6]">
           Waiting room
         </p>
-        <h1 className="mt-2 text-4xl font-bold">{meeting.title}</h1>
+        <h1 className="mt-3 text-[clamp(1.8rem,5vw,2.7rem)] font-bold tracking-[-.05em]">{meeting.title}</h1>
         <p className="mt-3 text-[#64748b]">
           Hosted by {meeting.hostName}. The meeting is not open yet.
         </p>
-        <div className="mt-8 grid gap-3 rounded-2xl bg-[#f4f8fd] p-5 text-left sm:grid-cols-2">
+        <div className="mt-8 grid gap-4 rounded-[18px] border border-[#e8ecf5] bg-[#f8faff] p-5 text-left sm:grid-cols-2">
           <div className="flex items-center gap-3">
             <CalendarClock className="text-[#176df3]" />
             <div>
@@ -176,18 +176,18 @@ export default function WaitingRoomPage() {
           <button
             onClick={startMeeting}
             disabled={starting}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#176df3] px-6 py-3 font-semibold disabled:opacity-50"
+            className="primary-button mt-6 text-white disabled:opacity-50"
           >
             <Play size={18} /> {starting ? "Starting..." : "Start meeting now"}
           </button>
         )}
         {!meeting.isHost && meeting.visibility === "private" && !meeting.canJoin && <div className="mt-6 space-y-3">
           <p className="text-sm text-[#64748b]">This is a private meeting. Request access from the host or a moderator.</p>
-          <button onClick={requestAccess} disabled={requesting || requestStatus === "pending" || requestStatus === "approved"} className="rounded-xl bg-[#176df3] px-6 py-3 font-semibold text-white disabled:opacity-50">{requesting ? "Sending request..." : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "Access approved — waiting for host" : "Request to join"}</button>
+          <button onClick={requestAccess} disabled={requesting || requestStatus === "pending" || requestStatus === "approved"} className="primary-button text-white disabled:opacity-50">{requesting ? "Sending request..." : requestStatus === "pending" ? "Request pending" : requestStatus === "approved" ? "Access approved — waiting for host" : "Request to join"}</button>
           {requestStatus === "denied" && <p className="text-sm text-red-600">Your request was denied. You can contact the host.</p>}
           {requestStatus === "approved" && <p className="text-sm text-emerald-700">Access approved. You can join when the host starts the meeting.</p>}
         </div>}
-        {!meeting.isHost && !meeting.open && <p className="mt-6 text-sm text-[#8795a8]">This page checks automatically and will enter the meeting when it opens.</p>}
+        {!meeting.isHost && !meeting.open && <p className="mt-6 text-sm text-[#8795a8]">This page updates automatically. You will enter the room when it opens.</p>}
       </div>
     </main>
   );
