@@ -586,3 +586,278 @@
   .meeting-board .meeting-board-tools button { padding: 6px 8px; }
   .meeting-board-tool-divider { display: none; }
 }
+
+/* ------------------------------------------------------------------------
+   Zoom-style whiteboard workspace. Scoped to the whiteboard; regular camera
+   cards, room header, chat and bottom controls retain their existing styles.
+   ------------------------------------------------------------------------ */
+.meeting-stage > .meeting-board.meeting-board-zoom {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #334d77;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f7f9fc;
+}
+.meeting-board-zoom .meeting-board-header {
+  flex: none;
+  min-height: 60px;
+  padding: 10px 14px;
+  background: #111e34;
+  border-bottom: 1px solid #283c60;
+  position: relative;
+  z-index: 4;
+}
+.meeting-board-zoom .meeting-board-heading strong { font-size: 14px; }
+.meeting-board-zoom .meeting-board-heading > div > span { color: #9bb1d5; }
+.meeting-board-collab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 12px;
+  padding: 6px 10px;
+  border: 1px solid #3d5070;
+  border-radius: 999px;
+  color: #c8d8f1;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.meeting-board-collab > span {
+  width: 7px;
+  height: 7px;
+  background: #47d7a1;
+  border-radius: 50%;
+}
+.meeting-board-zoom .meeting-board-header-actions button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 7px 10px;
+  background: #273953;
+  border: 1px solid #394f76;
+  color: #e6f1ff;
+  border-radius: 10px;
+}
+.meeting-board-zoom .meeting-board-header-actions button:disabled { opacity: .38; }
+.meeting-board-zoom .meeting-board-header-actions .meeting-board-present {
+  background: #4e67ec;
+  border-color: #758aff;
+  color: #fff;
+}
+.meeting-board-zoom .meeting-board-header-actions .meeting-board-present.is-presenting {
+  background: #38496c;
+}
+.meeting-board-workspace {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f6f8fc;
+}
+.meeting-stage > .meeting-board.meeting-board-zoom .meeting-board-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: #f9fafc;
+  overflow: hidden;
+}
+.meeting-stage > .meeting-board.meeting-board-zoom .meeting-board-surface > canvas {
+  display: block;
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+  max-width: initial;
+  max-height: initial;
+  aspect-ratio: 8 / 5;
+  background: white;
+  box-shadow: none;
+  border-radius: 0;
+  object-fit: fill;
+  touch-action: none;
+  transform-origin: center center;
+}
+.meeting-board-surface canvas.is-drawing { cursor: crosshair; }
+.meeting-board-surface canvas.is-selecting { cursor: default; }
+.meeting-board-surface canvas.is-panning { cursor: grab; }
+.meeting-board-surface canvas.is-panning:active { cursor: grabbing; }
+.meeting-board-floating-tools {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-height: calc(100% - 72px);
+  color: #1f2b40;
+  pointer-events: none;
+}
+.meeting-board-floating-tools > * { pointer-events: auto; }
+.meeting-board-tool-stack,
+.meeting-board-palette,
+.meeting-board-view-only,
+.meeting-board-bottom-left,
+.meeting-board-zoom-controls {
+  border: 1px solid #e2e7f0;
+  border-radius: 14px;
+  background: #ffffffee;
+  box-shadow: 0 8px 30px #18284122;
+  backdrop-filter: blur(10px);
+}
+.meeting-board-tool-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.meeting-board-tool-stack button {
+  width: 39px;
+  min-width: 39px;
+  min-height: 39px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: transparent;
+  color: #45546b;
+  transition: background .15s ease, color .15s ease;
+}
+.meeting-board-tool-stack button:hover { background: #edf3ff; }
+.meeting-board-tool-stack button.is-active {
+  color: #2c55d6;
+  background: #e8efff;
+  box-shadow: inset 0 0 0 1px #bad0ff;
+}
+.meeting-board-palette {
+  width: 182px;
+  max-height: 100%;
+  overflow: auto;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+.meeting-board-palette strong { font-size: 12px; color: #35455d; }
+.meeting-board-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.meeting-board-swatches button {
+  width: 27px;
+  min-width: 27px;
+  min-height: 27px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid transparent;
+}
+.meeting-board-swatches button.is-picked { outline: 2px solid #5976dd; outline-offset: 2px; }
+.meeting-board-weight,
+.meeting-board-text-label { display: grid; gap: 5px; color: #45546b; font-size: 12px; font-weight: 600; }
+.meeting-board-weight select,
+.meeting-board-text-label textarea {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  border: 1px solid #d8e0eb;
+  background: #fff;
+  color: #24344f;
+}
+.meeting-board-text-label textarea { min-height: 76px; resize: vertical; }
+.meeting-board-view-only { padding: 12px; display: grid; gap: 9px; }
+.meeting-board-view-only span { font-weight: 650; color: #334155; }
+.meeting-board-view-only button {
+  padding: 7px 10px;
+  min-height: 36px;
+  border-radius: 10px;
+  color: #fff;
+  background: #4e67ec;
+}
+.meeting-board-bottom-left {
+  position: absolute;
+  z-index: 3;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  color: #64748b;
+  font-size: 11px;
+  max-width: calc(100% - 24px);
+}
+.meeting-board-bottom-left button {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #bb334b;
+  background: #fff0f3;
+}
+.meeting-board-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meeting-board-zoom-controls {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  color: #45546b;
+}
+.meeting-board-zoom-controls button {
+  width: 33px;
+  min-width: 33px;
+  min-height: 33px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #45546b;
+  background: transparent;
+}
+.meeting-board-zoom-controls button:hover { background: #edf3ff; }
+.meeting-board-zoom-controls button:disabled { opacity: .4; }
+.meeting-board-zoom-controls span { font-weight: 650; font-size: 12px; min-width: 43px; text-align: center; }
+/* Speaker indication must not affect the size, grid position or aspect ratio. */
+.meeting-tile[data-speaking="true"] {
+  border-color: #58cc9b;
+  box-shadow: 0 0 0 2px #58cc9b75, 0 12px 34px rgba(0, 5, 16, 0.22);
+}
+@media (max-width: 760px) {
+  .meeting-board-zoom .meeting-board-header { min-height: 53px; padding: 8px; }
+  .meeting-board-zoom .meeting-board-heading-icon { display: none; }
+  .meeting-board-collab, .meeting-board-desktop-label { display: none; }
+  .meeting-board-zoom .meeting-board-header-actions { gap: 3px; }
+  .meeting-board-zoom .meeting-board-header-actions button { min-width: 32px; min-height: 34px; padding: 6px; }
+  .meeting-board-floating-tools { left: 8px; top: 8px; max-height: calc(100% - 72px); gap: 5px; }
+  .meeting-board-tool-stack { padding: 4px; }
+  .meeting-board-tool-stack button { min-width: 34px; width: 34px; min-height: 34px; }
+  .meeting-board-palette { width: 144px; padding: 8px; }
+  .meeting-board-bottom-left { left: 7px; bottom: 8px; max-width: 50%; }
+  .meeting-board-hint { display: none; }
+  .meeting-board-zoom-controls { bottom: 8px; right: 7px; }
+}
+@media (max-height: 610px) {
+  .meeting-board-floating-tools { max-height: calc(100% - 48px); }
+  .meeting-board-bottom-left { bottom: 6px; }
+  .meeting-board-zoom-controls { bottom: 6px; }
+}

@@ -48,7 +48,7 @@ export function MeetingAudio({ items, sink, onSinkError }) {
   </>;
 }
 
-function Tile({ person, stream, presentation, pinned, onPin, onSpotlight, staged }) {
+function Tile({ person, stream, presentation, pinned, onPin, onSpotlight, staged, speaking = false }) {
   const name = person?.name || "Participant";
   const [orientation, setOrientation] = useState("landscape");
   const updateOrientation = useCallback((value) => setOrientation((current) => current === value ? current : value), []);
@@ -57,6 +57,7 @@ function Tile({ person, stream, presentation, pinned, onPin, onSpotlight, staged
   return (
     <div className={presentation ? "meeting-tile meeting-tile--presentation" : "meeting-tile"}
       data-orientation={stream ? orientation : "landscape"}
+      data-speaking={speaking ? "true" : "false"}
       data-record-tile data-name={presentation ? name + " • Sharing screen" : name}>
       {stream ? <StreamElement stream={stream} onOrientationChange={updateOrientation} /> : <div className="meeting-avatar">
         {avatarUrl ? <img alt="" src={avatarUrl} /> : name.charAt(0).toUpperCase()}
@@ -76,7 +77,9 @@ function Tile({ person, stream, presentation, pinned, onPin, onSpotlight, staged
 }
 
 export default function VideoGrid({ people, cameras, screen, board, pinned, setPin, spotlight, activeSpeaker, onSpotlight, page, setPage }) {
-  const featured = people.find((person) => person.userId === (pinned || spotlight || activeSpeaker));
+  // An active-speaker event must NEVER move a tile between the grid and stage.
+  // Only an intentional pin, host spotlight, presentation or board opens the stage.
+  const featured = people.find((person) => person.userId === (pinned || spotlight));
   const stage = Boolean(screen || board || featured);
   const others = people.filter((person) => screen || board || person !== featured);
   const limit = 4;
@@ -85,6 +88,7 @@ export default function VideoGrid({ people, cameras, screen, board, pinned, setP
   const renderTile = (person) => <Tile key={person.peerId} person={person}
     stream={person.videoEnabled === false ? null : cameras.get(person.peerId)}
     pinned={pinned === person.userId} staged={spotlight === person.userId}
+    speaking={Boolean(activeSpeaker && person.userId === activeSpeaker)}
     onPin={() => setPin(pinned === person.userId ? null : person.userId)}
     onSpotlight={onSpotlight ? () => onSpotlight(spotlight === person.userId ? null : person.userId) : null} />;
   return (

@@ -12,6 +12,15 @@ export function cleanText(value, max) {
 
 export function boardAction(room, peer, action, data) {
   const existing = room.board.get(data.id);
+  if (action === "board-move") {
+    requireCondition(existing?.userId === peer.userId, "Only the author can move this object.");
+    requireCondition(Number.isInteger(data.dx) && Math.abs(data.dx) <= 1000 &&
+      Number.isInteger(data.dy) && Math.abs(data.dy) <= 1000);
+    const translated = existing.points.map(([x, y]) => [x + data.dx, y + data.dy]);
+    requireCondition(translated.every(([x, y]) => x >= 0 && x <= 1000 && y >= 0 && y <= 1000), "Object must remain on the board.");
+    existing.points = translated;
+    return existing;
+  }
   if (action === "board-add") {
     requireCondition(typeof data.id === "string" && /^[a-f0-9-]{36}$/i.test(data.id));
     if (existing) {
@@ -20,14 +29,16 @@ export function boardAction(room, peer, action, data) {
     }
     requireCondition(room.board.size < 400, "The board is full. Ask the host to clear it.");
     const { tool, color, points } = data;
-    requireCondition(["pen", "eraser", "line", "rectangle", "ellipse", "text"].includes(tool));
+    requireCondition(["pen", "highlighter", "eraser", "line", "arrow", "rectangle", "ellipse", "text", "sticky"].includes(tool));
     requireCondition(typeof color === "string" && /^#[a-f0-9]{6}$/i.test(color));
     requireCondition(Array.isArray(points) && points.length >= 1 && points.length <= 96 &&
       points.every((point) => Array.isArray(point) && point.length === 2 &&
         point.every((value) => Number.isInteger(value) && value >= 0 && value <= 1000)));
+    requireCondition(data.size === undefined || (Number.isInteger(data.size) && data.size >= 1 && data.size <= 30));
     const operation = {
       id: data.id, userId: peer.userId, order: ++room.boardOrder, tool, color, points,
-      text: tool === "text" ? cleanText(data.text, 120) : undefined, undone: false,
+      size: data.size ?? 4,
+      text: ["text", "sticky"].includes(tool) ? cleanText(data.text, 120) : undefined, undone: false,
     };
     room.board.set(data.id, operation);
     return operation;

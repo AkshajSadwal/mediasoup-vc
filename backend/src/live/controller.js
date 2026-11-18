@@ -116,7 +116,7 @@ export function reevaluate(meeting) {
   }
 }
 
-const boardActions = new Set(["board-add", "board-undo", "board-redo", "board-clear"]);
+const boardActions = new Set(["board-add", "board-move", "board-undo", "board-redo", "board-clear"]);
 const breakoutActions = new Set(["breakout-create", "breakout-assign", "breakout-auto", "breakout-start", "breakout-close", "breakout-extend", "breakout-end", "broadcast", "help", "help-dismiss"]);
 
 export function applyLiveAction(peer, action, data, move, closeRooms, saveSchedule) {
