@@ -236,7 +236,6 @@ The backend enforces signed authentication tokens, meeting admission decisions a
 
 The included WebRTC SFU necessarily receives and forwards media, so this implementation does not provide application-level end-to-end encryption. Browser speech recognition can involve a third-party provider, and server captions can process a speaker's audio for another participant who opts into captions. Recording runs in the participant's browser, but the app cannot prevent independent capture.
 
-See [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) for verified safeguards, outstanding risks, and validation requirements. A code review is not a penetration test or production security certification.
 
 ## License
 

@@ -93,6 +93,8 @@ export default function DeviceSettings({ kind, call, output, userId, notify, onE
   const [selected, setSelected] = useState(() => mediaPreferences(userId)[kind] || "");
   const [quality, setQuality] = useState(() => mediaPreferences(userId).quality || "balanced");
   const activeMenu = useRef(false);
+  const meetingCameraOn = useRef(call.videoEnabled);
+  meetingCameraOn.current = call.videoEnabled;
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -119,14 +121,20 @@ export default function DeviceSettings({ kind, call, output, userId, notify, onE
     activeMenu.current = true;
     return () => { activeMenu.current = false; };
   }, []);
-  useEffect(() => () => { preview?.getTracks().forEach((track) => track.stop()); }, [preview, canUse]);
+  useEffect(() => () => { preview?.getTracks().forEach((track) => track.stop()); }, [preview]);
+  useEffect(() => {
+    if (!canUse || (kind === "video" && call.videoEnabled)) setPreview(null);
+  }, [canUse, kind, call.videoEnabled]);
 
   const select = async (id, nextQuality) => {
+    // A preview is a separate acquisition and must not outlive the test.
+    preview?.getTracks().forEach((track) => track.stop());
+    setPreview(null);
     setBusy(true); setError("");
     try {
       await call.changeInput(kind, id, nextQuality);
       setSelected(mediaPreferences(userId)[kind] || id); setQuality(nextQuality);
-      setPreview(null); setRefresh((value) => value + 1);
+      setRefresh((value) => value + 1);
     } catch (failure) {
       setError(failure.name === "NotAllowedError" ? "Permission denied. Allow this input in your browser." : failure.message);
     } finally { setBusy(false); }
@@ -144,20 +152,28 @@ export default function DeviceSettings({ kind, call, output, userId, notify, onE
         {inputs.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || (kind === "audio" ? "Microphone " : "Camera ") + (index + 1)}</option>)}
       </select>
     </label>
-    <button type="button" disabled={busy || !canUse} onClick={() => select(selected, quality)}>Refresh input access</button>
+    <button type="button" disabled={busy || !canUse} onClick={() => select(selected, quality)}>{kind === "video" && !call.videoEnabled ? "Save camera selection" : "Refresh input access"}</button>
     {canUse && !liveInput && <button type="button" disabled={busy} onClick={async () => {
-      if (previewStream) return setPreview(null);
+      if (previewStream) {
+        previewStream.getTracks().forEach((track) => track.stop());
+        return setPreview(null);
+      }
       setError("");
       setBusy(true);
       try {
         const stream = await captureInput(kind, selected, quality, true);
-        if (!activeMenu.current || !permitted.current) return stream.getTracks().forEach((track) => track.stop());
+        if (!activeMenu.current || !permitted.current || (kind === "video" && meetingCameraOn.current)) {
+          return stream.getTracks().forEach((track) => track.stop());
+        }
         setPreview(stream);
         setRefresh((value) => value + 1);
       }
       catch { setError("The input is unavailable. Check browser permissions and reconnect the device."); }
       finally { setBusy(false); }
     }}>{previewStream ? "Stop local test" : kind === "audio" ? "Test microphone locally" : "Preview camera locally"}</button>}
+    {kind === "video" && canUse && !call.videoEnabled && <p role="status">{previewStream
+      ? "Local camera preview is active. Your camera light may be on, but video is not shared with the meeting. Stop the test or close settings to release it."
+      : "Meeting camera is off. Preview camera locally to test it temporarily without joining the video feed."}</p>}
     {kind === "audio" ? <>
       <Meter stream={canUse ? previewStream || liveInput : null} />
       {output.supported ? <>

@@ -79,6 +79,22 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
     }
   }, []);
 
+  // Disabling a video track does not reliably switch off a physical webcam.
+  // Release the raw capture, any background-effects output, and its producer.
+  const releaseCamera = useCallback((room = current.current) => {
+    switches.current.video = null; // Cancel any in-flight camera selection.
+    const tracks = capture.current?.getVideoTracks() || [];
+    for (const track of tracks) {
+      capture.current.removeTrack(track);
+      track.stop();
+    }
+    if (cameraTrack.current && !tracks.includes(cameraTrack.current)) cameraTrack.current.stop();
+    cameraTrack.current = null;
+    setCamera(null);
+    setRawVideoTrack(null);
+    if (room && !room.closed) void room.stopSource("camera").catch(() => undefined);
+  }, []);
+
   const startScreen = async () => {
     if (screenAttempt.current) return;
     const room = current.current;
@@ -152,6 +168,13 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
     if (!room?.send) throw new Error("Wait for the meeting media to connect.");
     const key = kind === "audio" ? "microphone" : "camera";
     if (room.live?.features[key] === false) throw new Error("The host has restricted this input.");
+    // Changing the saved camera/quality while off must not acquire the webcam.
+    // A user can explicitly start a temporary local preview from settings.
+    if (kind === "video" && !room.videoEnabled) {
+      switches.current.video = null;
+      saveMediaPreferences(userId, { video: id || "", ...(quality ? { quality } : {}) });
+      return;
+    }
     const revision = {};
     switches.current[kind] = revision;
     const stream = await captureInput(kind, id, quality, restore);
@@ -164,7 +187,10 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
       const existing = room.producers.get(key);
       if (existing) await existing.replaceTrack({ track });
       else if (track.enabled) await room.produce(key, track);
-      if (current.current !== room || room.closed) return track.stop();
+      if (!valid() || (kind === "video" && !room.videoEnabled)) {
+        if (kind === "video" && !room.videoEnabled) void room.stopSource("camera").catch(() => undefined);
+        return track.stop();
+      }
       track.enabled = kind === "audio" ? room.audioEnabled : room.videoEnabled;
       capture.current ??= new MediaStream();
       for (const previous of capture.current.getTracks()) if (previous.kind === kind) {
@@ -237,6 +263,7 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
           setActiveSpeaker(response.activeSpeaker);
           setAudio(response.self.audioEnabled);
           setVideo(response.self.videoEnabled);
+          if (!room.videoEnabled) releaseCamera(room);
           const existing = await room.load(response.rtpCapabilities);
           if (!valid()) return;
           if (mediaIntent.current.audio === false && room.audioEnabled) await room.ask("audio-state", { enabled: false });
@@ -249,7 +276,12 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
 
           if ((!capture.current || !capture.current.getTracks().length) && (room.audioEnabled || room.videoEnabled) && navigator.mediaDevices?.getUserMedia) {
             permissionPrompt ??= captureDevices(room.audioEnabled, room.videoEnabled, userId).then((stream) => {
-              if (disposed) { stream.getTracks().forEach((track) => track.stop()); return null; }
+              if (disposed || current.current !== room) { stream.getTracks().forEach((track) => track.stop()); return null; }
+              // Camera state may have changed while the browser permission prompt was open.
+              if (!room.videoEnabled) for (const track of stream.getVideoTracks()) {
+                stream.removeTrack(track);
+                track.stop();
+              }
               capture.current = stream;
               for (const track of stream.getTracks()) watchDevice(track.kind, track);
               return stream;
@@ -270,7 +302,13 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
             setCamera(new MediaStream([video]));
             setVideo(video.enabled);
           }
-          const result = await Promise.allSettled([room.videoEnabled && room.produce("camera", video), room.audioEnabled && room.produce("microphone", audio)]);
+          const publishCamera = async () => {
+            if (!room.videoEnabled || video?.readyState !== "live") return;
+            await room.produce("camera", video);
+            // An off event can arrive while WebRTC is creating the producer.
+            if (!room.videoEnabled && !room.closed) await room.stopSource("camera");
+          };
+          const result = await Promise.allSettled([publishCamera(), room.audioEnabled && room.produce("microphone", audio)]);
           if (valid()) {
             for (const [index, entry] of result.entries()) {
               if (entry.status === "rejected") {
@@ -361,8 +399,11 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
         if (room?.token !== roomToken) return;
         room.videoEnabled = enabled;
         mediaIntent.current.video = enabled;
-        for (const track of capture.current?.getVideoTracks() || []) track.enabled = enabled;
-        if (cameraTrack.current) cameraTrack.current.enabled = enabled;
+        if (!enabled) releaseCamera(room);
+        else {
+          for (const track of capture.current?.getVideoTracks() || []) track.enabled = true;
+          if (cameraTrack.current) cameraTrack.current.enabled = true;
+        }
         setVideo(enabled);
       });
       socket.on("presentation-stopped", ({ roomToken }) => {
@@ -403,7 +444,7 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
       cameraTrack.current = null;
       setCamera(null); setMic(null); setRawVideoTrack(null);
     };
-  }, [meetingId, userId, token, authReady, router, notify, stopScreen, watchDevice]);
+  }, [meetingId, userId, token, authReady, router, notify, stopScreen, releaseCamera, watchDevice]);
 
   const toggle = async (kind) => {
     const room = current.current;
@@ -412,6 +453,8 @@ export function useMeetingSession({ meetingId, userId, token, authReady, router,
     const enabled = !(audio ? room?.audioEnabled : room?.videoEnabled);
     try {
       if (!room) throw new Error("Wait for the meeting media to connect.");
+      // Don't wait for the server round trip to release the physical camera.
+      if (!audio && !enabled) releaseCamera(room);
       await room.ask(signal, { enabled });
       if (!enabled || room !== current.current) return;
       const raw = capture.current?.getTracks().find((track) => track.kind === kind && track.readyState === "live");
