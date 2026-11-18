@@ -168,8 +168,8 @@ export function disconnectPeer(socket) {
 
 export async function joinRoom(socket, data, callback) {
   if (!socket.connected || socket.joining || socket.user == null) return callback({ error: "AUTH_REQUIRED" });
-  const meetingId = typeof data?.roomName === "string" && data.roomName.trim();
-  if (!meetingId || meetingId.length > 128) return callback({ error: "Invalid room name." });
+  const meetingId = typeof data?.roomName === "string" ? data.roomName.trim() : "";
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(meetingId)) return callback({ error: "Invalid room name." });
   let peer = getPeer(socket.id);
   if (peer && peer.meeting.id !== meetingId) return callback({ error: "Leave the current meeting first." });
   if (peer?.ready) return callback(peer.joinResponse());

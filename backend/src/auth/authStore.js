@@ -9,10 +9,12 @@ const dataDir = path.resolve(__dirname, "../../../data");
 const usersPath = path.join(dataDir, "users.json");
 
 const ensureStore = () => {
-  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   if (!fs.existsSync(usersPath)) {
-    fs.writeFileSync(usersPath, "[]\n", "utf8");
+    fs.writeFileSync(usersPath, "[]\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
   }
+  // Protect both newly-created and pre-existing local account stores.
+  if (process.platform !== "win32") fs.chmodSync(usersPath, 0o600);
 };
 
 const readUsers = () => {
@@ -28,7 +30,8 @@ const readUsers = () => {
 const writeUsers = (users) => {
   ensureStore();
   const tempPath = `${usersPath}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(users, null, 2)}\n`, "utf8");
+  fs.writeFileSync(tempPath, `${JSON.stringify(users, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  if (process.platform !== "win32") fs.chmodSync(tempPath, 0o600);
   fs.renameSync(tempPath, usersPath);
 };
 
@@ -88,6 +91,8 @@ export const createPasswordUser = ({ username, password }) => {
 };
 
 export const verifyPasswordUser = ({ username, password }) => {
+  if (typeof password !== "string" || password.length < 8 || password.length > 128 ||
+      typeof username !== "string" || username.length > 128) return null;
   const cleanUsername = normalizeUsername(username);
   const users = readUsers();
   const user = users.find((item) => normalizeUsername(item.username) === cleanUsername);

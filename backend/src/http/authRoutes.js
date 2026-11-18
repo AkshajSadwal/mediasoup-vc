@@ -4,6 +4,8 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { requireAuth } from "./authMiddleware.js";
+import { accountRateLimit } from "./rateLimit.js";
+import { safeImageDimensions } from "./imageDimensions.js";
 import { getUserById, updateUserProfile } from "../auth/authStore.js";
 import {
   assertAuthConfiguration,
@@ -21,13 +23,19 @@ const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 router.get("/me", requireAuth, (req, res) => {
   const user = getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "Account not found." });
-  res.json({ user });
+  res.set("Cache-Control", "no-store").json({ user });
 });
 
-router.patch("/profile", requireAuth, (req, res) => {
+router.patch("/profile", requireAuth, accountRateLimit({ max: 30 }), (req, res) => {
+  let newAvatarPath = null;
   try {
     const { displayName, avatarDataUrl, removeAvatar } = req.body || {};
+    if (displayName !== undefined && (typeof displayName !== "string" ||
+        !displayName.trim() || displayName.trim().length > 40 || /[\x00-\x1f\x7f]/.test(displayName))) {
+      return res.status(400).json({ error: "Display name must be 1-40 characters." });
+    }
     let avatarUrl;
+    const oldAvatar = getUserById(req.user.id)?.avatarUrl;
     if (avatarDataUrl !== undefined) {
       if (avatarDataUrl === null || removeAvatar === true) {
         avatarUrl = null;
@@ -39,13 +47,14 @@ router.patch("/profile", requireAuth, (req, res) => {
         if (!bytes.length || bytes.length > MAX_AVATAR_BYTES) {
           return res.status(400).json({ error: "Profile image must be 5 MB or smaller." });
         }
-        const isPng = mime === "image/png" && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
-        const isJpeg = mime === "image/jpeg" && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-        if (!isPng && !isJpeg) return res.status(400).json({ error: "The image content does not match its file type." });
+        if (!safeImageDimensions(bytes, mime)) {
+          return res.status(400).json({ error: "Invalid image data or unsupported image dimensions (maximum 16 megapixels)." });
+        }
 
-        fs.mkdirSync(profileDir, { recursive: true });
-        const filename = `${crypto.randomUUID()}.${isPng ? "png" : "jpg"}`;
-        fs.writeFileSync(path.join(profileDir, filename), bytes, { flag: "wx" });
+        fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+        const filename = `${crypto.randomUUID()}.${mime === "image/png" ? "png" : "jpg"}`;
+        newAvatarPath = path.join(profileDir, filename);
+        fs.writeFileSync(newAvatarPath, bytes, { flag: "wx", mode: 0o600 });
         avatarUrl = `/profile-pictures/${filename}`;
       }
     }
@@ -55,8 +64,19 @@ router.patch("/profile", requireAuth, (req, res) => {
       ...(avatarUrl !== undefined ? { avatarUrl } : {}),
     });
     if (!user) return res.status(404).json({ error: "Account not found." });
-    res.json({ user });
+    // Old images must not remain publicly accessible indefinitely after replacement.
+    if (avatarUrl !== undefined && oldAvatar && oldAvatar !== avatarUrl &&
+        /^\/profile-pictures\/[0-9a-f-]{36}\.(?:png|jpg)$/.test(oldAvatar)) {
+      try { fs.rmSync(path.join(profileDir, path.basename(oldAvatar)), { force: true }); }
+      catch (error) { console.error("OLD AVATAR CLEANUP FAILED:", error); }
+    }
+    newAvatarPath = null;
+    res.set("Cache-Control", "no-store").json({ user });
   } catch (error) {
+    if (newAvatarPath) {
+      try { fs.rmSync(newAvatarPath, { force: true }); }
+      catch (cleanupError) { console.error("FAILED AVATAR WRITE CLEANUP:", cleanupError); }
+    }
     res.status(400).json({ error: error.message || "Could not update profile." });
   }
 });
@@ -66,10 +86,22 @@ router.patch("/profile", requireAuth, (req, res) => {
 const authAttempts = new Map();
 const authRateLimit = (req, res, next) => {
   const now = Date.now();
-  const key = req.ip || req.socket.remoteAddress || "unknown";
+  const remote = req.ip || req.socket.remoteAddress || "unknown";
+  // NextAuth forwards credential logins from its server. Limiting only by the
+  // backend connection IP would lock all users out after 30 shared attempts.
+  const subject = req.path === "/login" ? String(req.body?.username || "").trim().toLowerCase().slice(0, 128) :
+    req.path === "/google" ? String(req.body?.providerAccountId || "").slice(0, 128) : "";
+  const key = `${req.path}:${remote}:${subject ? crypto.createHash("sha256").update(subject).digest("hex") : ""}`;
   const windowMs = 15 * 60 * 1000;
   const limit = 30;
   const current = authAttempts.get(key);
+  // Prevent a flood of distinct source addresses from growing the limiter indefinitely.
+  if (!current && authAttempts.size >= 5000) {
+    for (const [address, entry] of authAttempts) {
+      if (now - entry.startedAt >= windowMs) authAttempts.delete(address);
+    }
+    if (authAttempts.size >= 5000) return res.status(429).json({ error: "Authentication is temporarily busy." });
+  }
   if (!current || now - current.startedAt >= windowMs) {
     authAttempts.set(key, { startedAt: now, count: 1 });
     return next();
@@ -128,11 +160,18 @@ router.post("/google", authRateLimit, (req, res) => {
 
   try {
     const bridgeSecret = process.env.AUTH_BRIDGE_SECRET;
-    if (!bridgeSecret || bridgeSecret.length < 32 || req.headers["x-auth-bridge-secret"] !== bridgeSecret) {
-      return res.status(401).json({ error: "Unauthorized auth bridge request." });
-    }
+    const providedSecret = req.headers["x-auth-bridge-secret"];
+    const secretMatches = typeof bridgeSecret === "string" && bridgeSecret.length >= 32 &&
+      typeof providedSecret === "string" && Buffer.byteLength(providedSecret) === Buffer.byteLength(bridgeSecret) &&
+      crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(bridgeSecret));
+    if (!secretMatches) return res.status(401).json({ error: "Unauthorized auth bridge request." });
     const { providerAccountId, email, name, image } = req.body || {};
-    if (!providerAccountId) return res.status(400).json({ error: "Google account ID is required." });
+    if (typeof providerAccountId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(providerAccountId) ||
+        (email != null && (typeof email !== "string" || email.length > 320)) ||
+        (name != null && (typeof name !== "string" || name.length > 120)) ||
+        (image != null && (typeof image !== "string" || image.length > 2048 || !/^https:\/\//.test(image)))) {
+      return res.status(400).json({ error: "Invalid Google profile data." });
+    }
     const user = upsertGoogleUser({ providerAccountId, email, name, image });
     res.json({ user, authToken: createAuthToken(user) });
   } catch (error) {

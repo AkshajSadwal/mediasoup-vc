@@ -11,8 +11,9 @@ const storePath = () => process.env.RAUMA_MEETINGS_FILE || path.join(dataDir, "m
 
 const ensureStore = () => {
   const meetingsPath = storePath();
-  fs.mkdirSync(path.dirname(meetingsPath), { recursive: true });
-  if (!fs.existsSync(meetingsPath)) fs.writeFileSync(meetingsPath, "[]\n", "utf8");
+  fs.mkdirSync(path.dirname(meetingsPath), { recursive: true, mode: 0o700 });
+  if (!fs.existsSync(meetingsPath)) fs.writeFileSync(meetingsPath, "[]\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
+  if (process.platform !== "win32") fs.chmodSync(meetingsPath, 0o600);
 };
 
 const normalizeMeeting = (meeting) => ({
@@ -34,11 +35,13 @@ const writeMeetings = (meetings) => {
   ensureStore();
   const meetingsPath = storePath();
   const tempPath = `${meetingsPath}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(meetings, null, 2)}\n`, "utf8");
+  fs.writeFileSync(tempPath, `${JSON.stringify(meetings, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  if (process.platform !== "win32") fs.chmodSync(tempPath, 0o600);
   fs.renameSync(tempPath, meetingsPath);
 };
 
 export const createMeeting = ({ hostUserId, hostName, title, scheduledAt, visibility = "public" }) => {
+  if (!["public", "private"].includes(visibility)) throw new Error("Invalid meeting visibility.");
   const timestamp = new Date(scheduledAt);
   if (Number.isNaN(timestamp.getTime())) throw new Error("Invalid meeting time.");
   if (timestamp.getTime() <= Date.now() + 30_000) throw new Error("Meeting must be scheduled at least 30 seconds in the future.");
@@ -53,7 +56,7 @@ export const createMeeting = ({ hostUserId, hostName, title, scheduledAt, visibi
     startedAt: null,
     status: "scheduled",
     attendeeUserIds: [],
-    visibility: visibility === "private" ? "private" : "public",
+    visibility,
     approvedUserIds: [],
     joinRequests: [],
     moderatorUserIds: [],
@@ -71,7 +74,8 @@ export const getMeeting = (roomId) => {
 
 export const listMeetingsForUser = (userId) =>
   readMeetings()
-    .filter((meeting) => !meeting.adoptedRoom && meeting.status !== "cancelled" && (meeting.hostUserId === userId || meeting.attendeeUserIds.includes(userId)))
+    .filter((meeting) => !meeting.adoptedRoom && meeting.status !== "cancelled" &&
+      (meeting.hostUserId === userId || (meeting.attendeeUserIds.includes(userId) && canJoinMeeting(meeting, userId))))
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
 
 export const addMeetingToCalendar = (roomId, userId) => {
@@ -80,6 +84,7 @@ export const addMeetingToCalendar = (roomId, userId) => {
   if (index < 0) throw new Error("Meeting not found.");
   const meeting = meetings[index];
   if (meeting.status === "cancelled") throw new Error("Meeting is cancelled.");
+  if (!canJoinMeeting(meeting, userId)) throw new Error("Meeting approval is required before adding this meeting to your calendar.");
   if (meeting.hostUserId !== userId && !meeting.attendeeUserIds.includes(userId)) meeting.attendeeUserIds.push(userId);
   meetings[index] = normalizeMeeting(meeting);
   writeMeetings(meetings);

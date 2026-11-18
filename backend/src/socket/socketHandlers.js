@@ -5,6 +5,7 @@ import { consumeHandler, consumerResume } from "./events/consumer.events.js";
 import { sendChatMessage } from "./events/chat.events.js";
 import { adminSetAudioMuted, adminRemoveParticipant } from "./events/admin.events.js";
 import { rate } from "../live/state.js";
+import { rateAccount } from "../live/accountRate.js";
 
 import { subscribeCaptions, subscribeBrowserCaptions, publishBrowserCaption } from "../live/captions.js";
 import { fileSignal } from "../live/files.js";
@@ -30,7 +31,10 @@ export default function registerSocketHandlers(socket) {
       if (typeof callback !== "function") return;
       try {
         if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid request.");
-        if (event === "joinRoom") rate(socket, "join", 12);
+        if (event === "joinRoom") {
+          rate(socket, "join", 12);
+          rateAccount(socket.user?.id, "joinRoom", 30, 60_000);
+        }
         else if (event !== "file-credit") rate(mountedPeer(socket, data), "signaling", 300);
         await handler(socket, data, callback);
       } catch (error) {

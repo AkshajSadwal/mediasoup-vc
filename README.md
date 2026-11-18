@@ -219,20 +219,24 @@ See [`deploy/oracle/README.md`](deploy/oracle/README.md) for the HTTPS, DNS, Cer
 
 For the specified `VM.Standard.E2.1.Micro`:
 
-- The Always Free shape has **1 GB RAM and 1/8 OCPU**, with the ability to use additional CPU resources; public internet bandwidth is limited to **up to 50 Mbps** under the Always Free description.
+- This is a resource-constrained VM profile. Verify the region-specific RAM, CPU and networking quotas with Oracle before deployment.
 - Run only the application processes needed: Nginx, Next.js, Express/Socket.IO, and one MediaSoup worker.
 - Use MongoDB Atlas and OCI Object Storage so database files and profile images do not consume the VM's local disk.
 - Expose web traffic through TCP 80/443 and expose only the configured MediaSoup RTC UDP/TCP range. Do not expose the backend API port directly to the public internet.
 - Configure `MEDIASOUP_ANNOUNCED_IP` to the VM's public IP and validate ICE connectivity from an external network.
 - Use HTTPS, backups, logs, monitoring, secret management, and a restart policy.
 
-This VM is suitable for a constrained demo or low-volume experiment, not a high-concurrency video-conferencing deployment. A MediaSoup SFU forwards media for participants, so network egress and CPU load grow with the number of streams and viewers. Consider OCI's Always Free Ampere A1 allowance (up to 2 OCPUs and 12 GB RAM across eligible instances) if available in your tenancy; validate native dependency/architecture compatibility and test the MediaSoup build before choosing ARM.
+This VM is suitable for a constrained demo or low-volume experiment, not a high-concurrency video-conferencing deployment. A MediaSoup SFU forwards media for participants, so network egress and CPU load grow with the number of streams and viewers. If considering an ARM-based alternative, verify the current Oracle quotas and validate native dependency compatibility before choosing the deployment architecture.
 
 Free-tier limits, availability, and terms can change. The planned MongoDB Atlas Free tier has a small storage allowance and throughput/data-transfer caps; it should be treated as a development/demo database, not assumed to support production workloads. Check current provider limits before relying on a free plan. See [`deploy/oracle/DATA_STORAGE_PLAN.md`](deploy/oracle/DATA_STORAGE_PLAN.md) for the proposed collections, OCI Object Storage model, connectivity, and migration sequence.
 
-## Security
+## Security and privacy
 
-The backend checks authenticated user identity and meeting roles server-side. Before production, review the OAuth bridge secret, JWT/session settings, upload validation, rate limiting, TLS, database permissions, and object-storage access policies. A source-code review is not a penetration test or production security certification.
+The backend enforces signed authentication tokens, meeting admission decisions and room-scoped media ownership. A private meeting's detailed metadata is withheld from accounts that have not been admitted, although meeting existence and access-request status can still be checked by a user who has its link. Profile images are public to anyone who has their URL; old local images are deleted when replaced or removed.
+
+The included WebRTC SFU necessarily receives and forwards media, so this implementation does not provide application-level end-to-end encryption. Browser speech recognition can involve a third-party provider, and server captions can process a speaker's audio for another participant who opts into captions. Recording runs in the participant's browser, but the app cannot prevent independent capture.
+
+See [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) for verified safeguards, outstanding risks, and validation requirements. A code review is not a penetration test or production security certification.
 
 ## License
 

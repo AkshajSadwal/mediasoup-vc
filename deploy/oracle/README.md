@@ -223,7 +223,7 @@ curl -I https://YOUR_DOMAIN
 
 Set up systemd services or a process supervisor so the backend and frontend restart after VM reboots. Do not expose their ports in Oracle security rules.
 
-## 7. Google OAuth will be configured later
+## 7. Optional Google OAuth setup
 
 The project uses NextAuth v4 with the Google provider already wired to the backend account bridge. Google sign-in is now registered only when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; the login/signup pages query NextAuth's provider list and hide the Google button until the provider is available.
 

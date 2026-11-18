@@ -61,7 +61,7 @@ export default function Home() {
   const joinMeeting = async (roomId) => {
     setJoinError("");
     const normalized = String(roomId || "").trim();
-    if (!normalized) throw new Error("Enter a meeting code.");
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(normalized)) throw new Error("Enter a valid meeting code (letters, numbers, hyphens, or underscores).");
     if (!ensureAuth(`/room/${normalized}`)) return;
 
     const lookup = await fetch(`${BACKEND_URL}/api/meetings/${encodeURIComponent(normalized)}`, {
@@ -79,6 +79,11 @@ export default function Home() {
     if (meeting.status === "cancelled") throw new Error("This meeting has been cancelled.");
 
     if (meeting.status === "scheduled") {
+      if (meeting.visibility === "private" && !meeting.canJoin) {
+        setModal(null);
+        router.push(`/waiting/${normalized}`);
+        return;
+      }
       const calendarResponse = await fetch(`${BACKEND_URL}/api/meetings/${encodeURIComponent(normalized)}/calendar`, {
         method: "POST", headers: { Authorization: `Bearer ${session.backendToken}` },
       });

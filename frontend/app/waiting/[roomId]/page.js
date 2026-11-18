@@ -133,9 +133,10 @@ export default function WaitingRoomPage() {
         <p className="mt-6 text-[11px] font-bold uppercase tracking-[.18em] text-[#526bf6]">
           Waiting room
         </p>
-        <h1 className="mt-3 text-[clamp(1.8rem,5vw,2.7rem)] font-bold tracking-[-.05em]">{meeting.title}</h1>
+        <h1 className="mt-3 text-[clamp(1.8rem,5vw,2.7rem)] font-bold tracking-[-.05em]">{meeting.title || "Private meeting"}</h1>
         <p className="mt-3 text-[#64748b]">
-          Hosted by {meeting.hostName}. The meeting is not open yet.
+          {meeting.hostName ? `Hosted by ${meeting.hostName}. ` : ""}
+          {meeting.open ? "Waiting for permission to join." : "The meeting is not open yet."}
         </p>
         <div className="mt-8 grid gap-4 rounded-[18px] border border-[#e8ecf5] bg-[#f8faff] p-5 text-left sm:grid-cols-2">
           <div className="flex items-center gap-3">

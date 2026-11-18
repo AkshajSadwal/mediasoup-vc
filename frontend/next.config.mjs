@@ -7,7 +7,7 @@ const nextConfig = {
   async rewrites() {
     return [
       { source: '/api/meetings/:path*', destination: `${backend}/api/meetings/:path*` },
-      ...['signup', 'login', 'google', 'me', 'profile'].map((name) => ({
+      ...['signup', 'login', 'me', 'profile'].map((name) => ({
         source: `/api/auth/${name}`, destination: `${backend}/api/auth/${name}`,
       })),
       { source: '/profile-pictures/:path*', destination: `${backend}/profile-pictures/:path*` },

@@ -19,11 +19,17 @@ import {
 } from "../meetings/meetingStore.js";
 import { emptyConfiguration, publicConfiguration, validateConfiguration } from "../meetings/configuration.js";
 import { requireAuth } from "./authMiddleware.js";
+import { accountRateLimit } from "./rateLimit.js";
+import { restrictedPrivateMeetingPreview } from "./meetingVisibility.js";
 import { applyConfiguration, findLiveMeeting, role } from "../live/state.js";
 import { publish, reevaluate } from "../live/controller.js";
 import { participantState } from "../socket/events/room.events.js";
 
 const router = express.Router();
+const limitCreation = accountRateLimit({ max: 20 });
+const limitCalendar = accountRateLimit({ max: 40 });
+const limitJoinRequests = accountRateLimit({ max: 30 });
+const limitTeamLinks = accountRateLimit({ max: 30 });
 
 const publicMeeting = (meeting, userId = null) => ({
   roomId: meeting.roomId,
@@ -42,7 +48,7 @@ const publicMeeting = (meeting, userId = null) => ({
   joinRequests: Boolean(userId && (userId === meeting.hostUserId || meeting.moderatorUserIds?.includes(userId))) ? meeting.joinRequests || [] : undefined,
 });
 
-router.post("/config", requireAuth, (req, res) => {
+router.post("/config", requireAuth, limitCreation, (req, res) => {
   try {
     const { meeting, links } = createConfiguredMeeting({
       hostUserId: req.user.id, hostName: req.user.displayName || req.user.username,
@@ -52,7 +58,7 @@ router.post("/config", requireAuth, (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-router.post("/", requireAuth, (req, res) => {
+router.post("/", requireAuth, limitCreation, (req, res) => {
   try {
     const meeting = createMeeting({
       hostUserId: req.user.id,
@@ -73,7 +79,11 @@ router.get("/", requireAuth, (req, res) => {
 
 router.get("/:roomId", requireAuth, (req, res) => {
   const meeting = getMeeting(req.params.roomId);
-  if (meeting) return res.set("Cache-Control", "no-store").json(publicMeeting(meeting, req.user.id));
+  if (meeting) {
+    const restricted = restrictedPrivateMeetingPreview(meeting, req.user.id);
+    if (restricted) return res.set("Cache-Control", "no-store").json(restricted);
+    return res.set("Cache-Control", "no-store").json(publicMeeting(meeting, req.user.id));
+  }
   // Unscheduled rooms can exist in memory before the host saves any settings.
   // Only current members may read this temporary room's settings.
   const live = findLiveMeeting(req.params.roomId);
@@ -97,7 +107,7 @@ router.get("/:roomId/access", requireAuth, (req, res) => {
   res.json({ canJoin: canJoinMeeting(meeting, req.user.id), requestStatus: request?.status || null, visibility: meeting.visibility || "public" });
 });
 
-router.post("/:roomId/request-access", requireAuth, (req, res) => {
+router.post("/:roomId/request-access", requireAuth, limitJoinRequests, (req, res) => {
   try {
     const meeting = requestMeetingAccess(req.params.roomId, req.user.id, req.user.name || req.user.username);
     const request = meeting.joinRequests.find((item) => item.userId === req.user.id);
@@ -142,7 +152,7 @@ router.patch("/:roomId/config", requireAuth, (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-router.post("/:roomId/teams", requireAuth, (req, res) => {
+router.post("/:roomId/teams", requireAuth, limitTeamLinks, (req, res) => {
   try {
     // The first participant is the host for an unscheduled/unsaved meeting.
     // Persist it only after verifying the authenticated host identity.
@@ -199,7 +209,7 @@ router.post("/:roomId/moderators/:targetUserId", requireAuth, (req, res) => {
   } catch (error) { res.status(403).json({ error: error.message }); }
 });
 
-router.post("/:roomId/calendar", requireAuth, (req, res) => {
+router.post("/:roomId/calendar", requireAuth, limitCalendar, (req, res) => {
   try {
     const meeting = addMeetingToCalendar(req.params.roomId, req.user.id);
     res.json({ meeting: publicMeeting(meeting, req.user.id), open: isMeetingOpen(meeting) });

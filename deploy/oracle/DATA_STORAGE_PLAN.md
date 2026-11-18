@@ -45,7 +45,7 @@ This is the target design for the next implementation phase. The current code st
 
 ## MongoDB Atlas connectivity
 
-- Use Atlas M0 only for a small demo/prototype. Current Free cluster limits include 0.5 GB storage, capped throughput and data transfer, and automatic pause after 30 days without connections. See MongoDB's live documentation.
+- Use Atlas Free only for a small demo/prototype. Storage, traffic and idle-cluster limits can change; confirm current quotas in MongoDB's official documentation before deployment.
 - Select the nearest supported Atlas region; Atlas Free regions are a subset of AWS, Google Cloud, and Azure regions.
 - Add the Oracle VM's reserved public IP to the Atlas Network Access IP Access List. Avoid `0.0.0.0/0`.
 - Create a dedicated least-privilege database user and put the `mongodb+srv://` URI in a server-only environment variable.

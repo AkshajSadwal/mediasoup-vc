@@ -15,14 +15,26 @@ import initializeSocket from "./socket/index.js";
 import authRoutes from "./http/authRoutes.js";
 import { reconcileStoredBreakouts } from "./meetings/meetingStore.js";
 import meetingRoutes from "./http/meetingRoutes.js";
+import { requireAuth } from "./http/authMiddleware.js";
 
 const app = express();
 // The application is deployed behind one trusted Nginx reverse proxy.
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const profilePicturesDir = path.resolve(__dirname, "../../data/profile-pictures");
-app.use("/profile-pictures", express.static(profilePicturesDir, { fallthrough: false, maxAge: "7d", immutable: true }));
-app.use(express.json({ limit: "8mb" }));
+app.use("/profile-pictures", express.static(profilePicturesDir, {
+  fallthrough: false, maxAge: 0,
+  setHeaders: (res) => res.setHeader("Cache-Control", "no-store"),
+}));
+// Authenticate before parsing the larger avatar upload payload.
+app.use("/api/auth/profile", requireAuth, express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "64kb" }));
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:3000",

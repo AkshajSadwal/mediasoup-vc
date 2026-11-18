@@ -33,6 +33,9 @@ export default function AddMeetingModal({ session, onClose, onSaved }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Meeting not found.");
+      if (data.visibility === "private" && !data.canJoin) {
+        throw new Error("This meeting is private. Request access using the meeting link before adding it to your calendar.");
+      }
       if (data.status !== "scheduled") throw new Error("Only scheduled meetings can be added to your calendar.");
       setMeeting(data);
     } catch (err) {
